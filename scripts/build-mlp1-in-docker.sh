@@ -18,6 +18,7 @@ fi
 SOURCE_DATE_EPOCH="$(git -C "$SOURCE_DIR" show -s --format=%ct HEAD)"
 export SOURCE_DATE_EPOCH
 
+rm -rf "$BUILD_DIR" "$ARTIFACT_DIR"
 mkdir -p "$BUILD_DIR" "$ARTIFACT_DIR/bin" "$ARTIFACT_DIR/provenance"
 
 /usr/bin/cmake -S "$SOURCE_ROOT" -B "$BUILD_DIR" --fresh \

@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="${MLP1_ARTIFACT_DIR:-$ROOT_DIR/output/mlp1/build}"
+BUILD_DIR="$ROOT_DIR/output/mlp1/build"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/output/mlp1/yabasanshiro}"
-SOURCE_DIR="${YABASANSHIRO_SOURCE_DIR:-$ROOT_DIR/workdir/mlp1/yabause}"
-CMAKE_DIR="${YABASANSHIRO_CMAKE_DIR:-$ROOT_DIR/output/mlp1/cmake}"
+SOURCE_DIR="$ROOT_DIR/workdir/mlp1/yabause"
+CMAKE_DIR="$ROOT_DIR/output/mlp1/cmake"
 
 for command_name in jq shasum file; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -16,7 +16,7 @@ done
 
 for required_path in \
     "$BUILD_DIR/bin/yabasanshiro" \
-    "$BUILD_DIR/build-manifest.json" \
+    "$BUILD_DIR/provenance/build-manifest.json" \
     "$ROOT_DIR/config/mlp1/launch.sh" \
     "$ROOT_DIR/config/mlp1/defaults/config.version" \
     "$ROOT_DIR/config/mlp1/defaults/es_temporaryinput.cfg" \
@@ -62,8 +62,6 @@ install -m 0644 "$CMAKE_DIR/src/retro_arena/Json/src/Json/LICENSE.MIT" \
 install -m 0644 "$CMAKE_DIR/src/libchdr-prefix/src/libchdr/LICENSE.txt" \
     "$OUTPUT_DIR/licenses/libchdr-BSD-3-Clause.txt"
 
-install -m 0644 "$BUILD_DIR/build-manifest.json" \
-    "$OUTPUT_DIR/provenance/build-manifest.json"
 cp -R "$BUILD_DIR/provenance/." "$OUTPUT_DIR/provenance/"
 
 cat >"$OUTPUT_DIR/README.txt" <<'EOF'
@@ -72,9 +70,16 @@ Internal YabaSanshiro standalone performance probe for Leaf on MLP1.
 This package contains no BIOS or game content. It is not approved for public
 binary distribution. RetroArch remains the Saturn default.
 
-For the native-exit proof, Select opens the YabaSanshiro menu. Down three times
-and A chooses Exit. Leaf Menu remains Jawaka's generic recovery quit until the
-native path is proven.
+The MLP1 port forces the native renderer and menu into the panel's landscape
+orientation. HLE BIOS is the tested default; an external BIOS remains available
+as an explicit YABASANSHIRO_BIOS_MODE=external compatibility override.
+
+Configuration is private app data. Backup RAM is stored below
+Saves/YabaSanshiro and native .yss states below States/YabaSanshiro for the
+ROM source selected by Jawaka.
+
+The physical Menu button opens YabaSanshiro's native menu. Down three times and
+A chooses Exit and returns to Leaf.
 EOF
 
 config_version="$(tr -d '[:space:]' <"$OUTPUT_DIR/defaults/config.version")"
@@ -102,7 +107,7 @@ jq \
       package_schema_version: $package_schema_version,
       config_schema_version: $config_schema_version,
       files: $files
-    }' "$BUILD_DIR/build-manifest.json" >"$OUTPUT_DIR/manifest.json"
+    }' "$BUILD_DIR/provenance/build-manifest.json" >"$OUTPUT_DIR/manifest.json"
 
 "$ROOT_DIR/scripts/verify-mlp1-package.sh" "$OUTPUT_DIR"
 printf 'Packaged internal MLP1 probe: %s\n' "$OUTPUT_DIR"

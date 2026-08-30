@@ -1,0 +1,285 @@
+From: Utility Muffin Research Kitchen <umrk@users.noreply.github.com>
+Subject: [PATCH] Rotate the MLP1 native renderer and menu
+
+Use YabaSanshiro's existing renderer rotation for gameplay. The retro_arena
+NanoGUI path bypasses that renderer, so give it a landscape logical canvas and
+rotate only its NanoVG commands and pointer coordinates. Omit the decorative
+raw-GL About image that bypasses that transform. Screenshot rotation happens
+once when the native menu opens; normal gameplay adds no frame copy.
+---
+
+diff --git a/yabause/src/nanovg/nanovg_osdcore.c b/yabause/src/nanovg/nanovg_osdcore.c
+index 78e7d0c7..29dbc226 100644
+--- a/yabause/src/nanovg/nanovg_osdcore.c
++++ b/yabause/src/nanovg/nanovg_osdcore.c
+@@ -295,8 +295,18 @@ void OSDNanovgDisplayMessage(OSDMessage_struct * message, pixel_t * buffer, int
+   float fontsize = 32.0f;
+   int maxlen = 0;
+   int i = 0;
++  int framewidth;
++  int frameheight;
++  int rotate90;
+ 
+   VIDCore->GetGlSize(&vidwidth, &vidheight);
++  framewidth = vidwidth;
++  frameheight = vidheight;
++  rotate90 = getenv("YABASANSHIRO_MLP1_ROTATE_90") != NULL;
++  if (rotate90) {
++    vidwidth = frameheight;
++    vidheight = framewidth;
++  }
+   
+ 
+   if (message->type == OSDMSG_FPS) {
+@@ -322,7 +332,12 @@ void OSDNanovgDisplayMessage(OSDMessage_struct * message, pixel_t * buffer, int
+ 
+ 
+ 
+-  nvgBeginFrame(vg, vidwidth, vidheight, 1.0f);
++  nvgBeginFrame(vg, framewidth, frameheight, 1.0f);
++  if (rotate90) {
++    nvgSave(vg);
++    nvgTranslate(vg, 0, frameheight);
++    nvgRotate(vg, -NVG_PI / 2.0f);
++  }
+ 
+ 
+   nvgFontSize(vg, fontsize);
+@@ -367,6 +382,9 @@ void OSDNanovgDisplayMessage(OSDMessage_struct * message, pixel_t * buffer, int
+     nvgText(vg, LeftX, TxtY, message->message, NULL);
+   }
+ 
++  if (rotate90) {
++    nvgRestore(vg);
++  }
+   nvgEndFrame(vg);
+ 
+ }
+diff --git a/yabause/src/retro_arena/MenuScreen.cpp b/yabause/src/retro_arena/MenuScreen.cpp
+index 33591a44..c82ac9a9 100644
+--- a/yabause/src/retro_arena/MenuScreen.cpp
++++ b/yabause/src/retro_arena/MenuScreen.cpp
+@@ -19,6 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+ */
+ 
+ #include "MenuScreen.h"
++#include <cstdlib>
+ #include <nanogui/window.h>
+ #include <nanogui/layout.h>
+ #include <nanogui/label.h>
+@@ -77,5 +78,6 @@ MenuScreen::MenuScreen( SDL_Window* pwindow, int rwidth, int rheight, const std:
+   swindow = nullptr;
+   imageWindow = nullptr;
+ 
++  if (getenv("YABASANSHIRO_MLP1_ROTATE_90") == nullptr) {
+   int image_pix_size_w = this->width() / 2;
+   int image_pix_size_h = this->height() / 2;
+@@ -93,6 +95,7 @@ MenuScreen::MenuScreen( SDL_Window* pwindow, int rwidth, int rheight, const std:
+   imageView->setFixedHeight(image_pix_size_h);
+   imageWindow->center();
+   //imageWindow->setModal(true);
++  }
+ 
+   std::string title = "Yaba Sanshiro "+ std::string(YAB_VERSION) +" Menu";
+         window = new Window(this, title);
+@@ -362,13 +363,15 @@ void MenuScreen::showConfigDialog( PopupButton *parent ){
+   });
+ 
+ 
+-  ba = new Button(popup,"Rotate screen");  
+-  ba->setFlags(Button::ToggleButton); 
+-  ba->setPushed( preference->getBool("Rotate screen",false) );
+-  ba->setChangeCallback([this,preference](bool state) { 
+-    preference->setBool("Rotate screen",state);
+-    VideoSetSetting(VDP_SETTING_ROTATE_SCREEN, state);
+-  });
++  if (getenv("YABASANSHIRO_MLP1_ROTATE_90") == nullptr) {
++    ba = new Button(popup,"Rotate screen");
++    ba->setFlags(Button::ToggleButton);
++    ba->setPushed( preference->getBool("Rotate screen",false) );
++    ba->setChangeCallback([this,preference](bool state) {
++      preference->setBool("Rotate screen",state);
++      VideoSetSetting(VDP_SETTING_ROTATE_SCREEN, state);
++    });
++  }
+ 
+ }
+ 
+diff --git a/yabause/src/retro_arena/main.cpp b/yabause/src/retro_arena/main.cpp
+index 3b3b581c..7048b42d 100644
+--- a/yabause/src/retro_arena/main.cpp
++++ b/yabause/src/retro_arena/main.cpp
+@@ -18,6 +18,7 @@ along with YabaSanshiro; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+ */
+ 
++#include <cstdlib>
+ #include <exception>
+ #include <functional>
+ #include <string>
+@@ -165,6 +166,10 @@ MenuScreen * menu;
+ using std::string;
+ string g_keymap_filename;
+ 
++static bool mlp1Rotate90Enabled() {
++  return getenv("YABASANSHIRO_MLP1_ROTATE_90") != nullptr;
++}
++
+ void hideMenuScreen();
+ 
+ //---------------------------------------------------------------------------------------------
+@@ -248,7 +253,8 @@ int yabauseinit()
+ #endif
+   yinit.use_new_scsp = 1;
+   yinit.resolution_mode = pre.getInt( "Resolution" ,g_resolution_mode);
+-  yinit.rotate_screen = pre.getBool( "Rotate screen" , false );
++  yinit.rotate_screen = mlp1Rotate90Enabled() ||
++                        pre.getBool( "Rotate screen" , false );
+   yinit.scsp_sync_count_per_frame = g_scsp_sync;
+   yinit.extend_backup = 1;
+ #if defined(__JETSON__)  
+@@ -679,6 +685,8 @@ int saveScreenshot( const char * filename ){
+     
+     int width;
+     int height;
++    int png_width;
++    int png_height;
+     unsigned char * buf = NULL;
+     unsigned char * bufRGB = NULL;
+     png_bytep * row_pointers = NULL;
+@@ -714,9 +722,30 @@ int saveScreenshot( const char * filename ){
+ 	for( u = 3; u <width*height*4; u+=4 ){
+ 		buf[u]=0xFF;
+ 	}
+-    row_pointers = (png_byte**)malloc(sizeof(png_bytep) * height);
+-    for (v=0; v<height; v++)
+-        row_pointers[v] = (png_byte*)&buf[ (height-1-v) * width * 4];
++    png_width = width;
++    png_height = height;
++    if (mlp1Rotate90Enabled()) {
++        bufRGB = (unsigned char *)malloc(width * height * 4);
++        if (bufRGB == NULL) {
++            YUI_LOG("not enough memory for rotated screenshot\n");
++            goto FINISH;
++        }
++        png_width = height;
++        png_height = width;
++        for (v = 0; v < png_height; v++) {
++            for (u = 0; u < png_width; u++) {
++                memcpy(&bufRGB[(v * png_width + u) * 4],
++                       &buf[(u * width + v) * 4], 4);
++            }
++        }
++    }
++
++    row_pointers = (png_byte**)malloc(sizeof(png_bytep) * png_height);
++    for (v = 0; v < png_height; v++) {
++        row_pointers[v] = mlp1Rotate90Enabled()
++            ? (png_byte*)&bufRGB[v * png_width * 4]
++            : (png_byte*)&buf[(height - 1 - v) * width * 4];
++    }
+ 
+     // save as png
+     if ((outfile = fopen(filename, "wb")) == NULL) {
+@@ -751,7 +780,7 @@ int saveScreenshot( const char * filename ){
+     }
+     bit_depth = 8;
+     color_type = PNG_COLOR_TYPE_RGB_ALPHA;
+-    png_set_IHDR(png_ptr, info_ptr, width, height,
++    png_set_IHDR(png_ptr, info_ptr, png_width, png_height,
+         bit_depth, color_type, PNG_INTERLACE_NONE,
+         PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+     //png_set_gAMA(png_ptr, info_ptr, 1.0);
+diff --git a/yabause/src/retro_arena/nanogui-sdl/src/screen.cpp b/yabause/src/retro_arena/nanogui-sdl/src/screen.cpp
+index 0c135ab2..8b289fd6 100644
+--- a/yabause/src/retro_arena/nanogui-sdl/src/screen.cpp
++++ b/yabause/src/retro_arena/nanogui-sdl/src/screen.cpp
+@@ -11,6 +11,7 @@
+     BSD-style license that can be found in the LICENSE.txt file.
+ */
+ 
++#include <cstdlib>
+ #include <nanogui/screen.h>
+ #include <nanogui/theme.h>
+ #include <nanogui/opengl.h>
+@@ -118,6 +119,10 @@ static bool __glInit = false;
+ 
+ std::map<SDL_Window *, Screen *> __nanogui_screens;
+ 
++static bool mlp1Rotate90Enabled() {
++    return getenv("YABASANSHIRO_MLP1_ROTATE_90") != nullptr;
++}
++
+ static void __initGl()
+ {
+    if( !__glInit )
+@@ -250,8 +255,12 @@ void Screen::onEvent(SDL_Event& event)
+ void Screen::initialize(SDL_Window* window)
+ {
+     _window = window;    
+-    SDL_GetWindowSize( window, &mSize[0], &mSize[1]);
+-    SDL_GetWindowSize( window, &mFBSize[0], &mFBSize[1]);
++    Vector2i windowSize;
++    SDL_GetWindowSize(window, &windowSize[0], &windowSize[1]);
++    mFBSize = windowSize;
++    mSize = mlp1Rotate90Enabled()
++        ? Vector2i(windowSize[1], windowSize[0])
++        : windowSize;
+     
+     int flags = NVG_STENCIL_STROKES | NVG_ANTIALIAS;
+ #ifdef NDEBUG
+@@ -336,13 +345,22 @@ void Screen::drawWidgets()
+ 
+     //SDL_GL_MakeCurrent( _window, _glcontext );
+     SDL_GL_GetDrawableSize(_window, &mFBSize[0], &mFBSize[1]);
+-    SDL_GetWindowSize( _window, &mSize[0], &mSize[1]);
++    Vector2i windowSize;
++    SDL_GetWindowSize(_window, &windowSize[0], &windowSize[1]);
++    mSize = mlp1Rotate90Enabled()
++        ? Vector2i(windowSize[1], windowSize[0])
++        : windowSize;
+     glViewport(0, 0, mFBSize[0], mFBSize[1]);  
+ 
+     /* Calculate pixel ratio for hi-dpi devices. */
+-    mPixelRatio = (float) mFBSize[0] / (float) mSize[0];
++    mPixelRatio = (float) mFBSize[0] / (float) windowSize[0];
+     
+-    nvgBeginFrame(mNVGContext, mSize[0], mSize[1], mPixelRatio);
++    nvgBeginFrame(mNVGContext, windowSize[0], windowSize[1], mPixelRatio);
++    if (mlp1Rotate90Enabled()) {
++        nvgSave(mNVGContext);
++        nvgTranslate(mNVGContext, 0, windowSize[1]);
++        nvgRotate(mNVGContext, -NVG_PI / 2.0f);
++    }
+ 
+     draw(mNVGContext);
+ 
+@@ -388,6 +406,9 @@ void Screen::drawWidgets()
+         }
+     }
+ 
++    if (mlp1Rotate90Enabled()) {
++        nvgRestore(mNVGContext);
++    }
+     nvgEndFrame(mNVGContext);
+ }
+ 
+@@ -411,7 +432,15 @@ bool Screen::keyboardCharacterEvent(unsigned int codepoint) {
+ }
+ 
+ bool Screen::cursorPosCallbackEvent(double x, double y) {
+-    Vector2i p((int) x, (int) y);
++    Vector2i p;
++    if (mlp1Rotate90Enabled()) {
++        Vector2i windowSize;
++        SDL_GetWindowSize(_window, &windowSize[0], &windowSize[1]);
++        p = Vector2i(windowSize[1] - (int)y, (int)x);
++    }
++    else {
++        p = Vector2i((int)x, (int)y);
++    }
+     bool ret = false;
+     mLastInteraction = SDL_GetTicks();
+     try {
+-- 
+2.39.5

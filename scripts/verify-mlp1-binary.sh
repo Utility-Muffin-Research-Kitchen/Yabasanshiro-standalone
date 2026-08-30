@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOCKER="${DOCKER:-docker}"
 TOOLCHAIN_IMAGE="${TOOLCHAIN_IMAGE:-ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:local}"
-BINARY="${MLP1_BINARY:-$ROOT_DIR/output/mlp1/build/bin/yabasanshiro}"
-PROVENANCE_DIR="$(dirname "$(dirname "$BINARY")")/provenance"
+BINARY="$ROOT_DIR/output/mlp1/build/bin/yabasanshiro"
+PROVENANCE_DIR="$ROOT_DIR/output/mlp1/build/provenance"
 
 if [ ! -x "$BINARY" ]; then
     echo "missing MLP1 YabaSanshiro binary: $BINARY" >&2
@@ -35,7 +35,16 @@ file "$BINARY" | grep -q 'ELF 64-bit LSB.*ARM aarch64'
 
 expected_dependencies="$(mktemp)"
 actual_dependencies="$(mktemp)"
-trap 'rm -f "$expected_dependencies" "$actual_dependencies"' EXIT
+remote=""
+serial=""
+remote_pushed=0
+cleanup() {
+    rm -f "$expected_dependencies" "$actual_dependencies"
+    if [ "$remote_pushed" -eq 1 ]; then
+        adb -s "$serial" shell "rm -f '$remote'" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
 
 cat >"$expected_dependencies" <<'EOF'
 ld-linux-aarch64.so.1
@@ -73,11 +82,16 @@ if command -v adb >/dev/null 2>&1; then
         serial="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
     fi
     if [ -n "$serial" ]; then
-        remote=/data/local/tmp/umrk-yabasanshiro-abi-check
+        remote="/data/local/tmp/umrk-yabasanshiro-abi-check-$$"
         adb -s "$serial" push "$BINARY" "$remote" >/dev/null
-        adb -s "$serial" shell \
-            "chmod 755 '$remote' && LD_TRACE_LOADED_OBJECTS=1 '$remote'"
-        adb -s "$serial" shell "rm -f '$remote'"
+        remote_pushed=1
+        loader_trace="$(adb -s "$serial" shell \
+            "chmod 755 '$remote' && LD_TRACE_LOADED_OBJECTS=1 '$remote'" 2>&1)"
+        printf '%s\n' "$loader_trace"
+        if printf '%s\n' "$loader_trace" | grep -Eiq 'not found|No such file'; then
+            echo "device loader trace contains an unresolved dependency" >&2
+            exit 1
+        fi
     fi
 fi
 

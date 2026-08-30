@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_DIR="${YABASANSHIRO_SOURCE_DIR:-$ROOT_DIR/workdir/mlp1/yabause}"
+SOURCE_DIR="$ROOT_DIR/workdir/mlp1/yabause"
 PATCH_DIR="$ROOT_DIR/patches"
 
 # shellcheck disable=SC1091
@@ -32,15 +32,15 @@ done < <(find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' | LC_ALL=C sort)
 
 # A completed build leaves only this repository's deterministic patches
 # applied. Reverse that exact set, then refuse to overwrite any other edit.
-if [ -n "$(git -C "$SOURCE_DIR" status --short --untracked-files=no)" ]; then
+if [ -n "$(git -C "$SOURCE_DIR" status --short --untracked-files=all)" ]; then
     for ((index=${#PATCHES[@]} - 1; index >= 0; index--)); do
         patch_path="${PATCHES[$index]}"
         if git -C "$SOURCE_DIR" apply --reverse --check \
                 "$patch_path" >/dev/null 2>&1; then
-            git -C "$SOURCE_DIR" apply --reverse "$patch_path"
+            git -C "$SOURCE_DIR" apply --reverse --whitespace=nowarn "$patch_path"
         fi
     done
-    if [ -n "$(git -C "$SOURCE_DIR" status --short --untracked-files=no)" ]; then
+    if [ -n "$(git -C "$SOURCE_DIR" status --short --untracked-files=all)" ]; then
         echo "upstream checkout has non-package changes: $SOURCE_DIR" >&2
         echo "refusing to overwrite an edited source tree" >&2
         exit 1
@@ -50,6 +50,18 @@ fi
 git -C "$SOURCE_DIR" checkout --detach "$YABASANSHIRO_UPSTREAM_SHA"
 git -C "$SOURCE_DIR" submodule sync --recursive
 git -C "$SOURCE_DIR" submodule update --init --recursive
+
+# `$name` is expanded by the shell Git starts inside each submodule.
+# shellcheck disable=SC2016
+if ! git -C "$SOURCE_DIR" submodule foreach --quiet --recursive '
+    test -z "$(git status --porcelain --untracked-files=all)" || {
+        echo "dirty submodule: $name" >&2
+        exit 1
+    }
+'; then
+    echo "upstream checkout contains a modified or untracked submodule file" >&2
+    exit 1
+fi
 
 actual_sha="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
 if [ "$actual_sha" != "$YABASANSHIRO_UPSTREAM_SHA" ]; then

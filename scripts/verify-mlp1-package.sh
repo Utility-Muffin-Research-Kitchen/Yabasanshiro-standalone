@@ -46,9 +46,17 @@ jq -e '
   .kind == "standalone-emulator-probe" and
   .distribution_status == "blocked-pending-gpl-eula-review" and
   .package_schema_version == 1 and
-  .config_schema_version == 1 and
+  .config_schema_version == 2 and
+  (.patches | type == "array" and length > 0) and
+  all(.patches[];
+    (.sha256 | test("^[0-9a-f]{64}$")) and
+    (.path | startswith("patches/")) and
+    .upstream_status == "not-submitted") and
   (.files | type == "array" and length > 0)
 ' "$MANIFEST" >/dev/null
+
+grep -F 'name="select"        type="button" id="10"' \
+    "$PACKAGE_DIR/defaults/es_temporaryinput.cfg" >/dev/null
 
 binary_sha="$(shasum -a 256 "$PACKAGE_DIR/bin/yabasanshiro" | awk '{print $1}')"
 if [ "$binary_sha" != "$(jq -r '.binary_sha256' "$MANIFEST")" ]; then

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_DIR="${YABASANSHIRO_SOURCE_DIR:-$ROOT_DIR/workdir/mlp1/yabause}"
-OUTPUT_DIR="${YABASANSHIRO_HOST_TOOLS_DIR:-$ROOT_DIR/workdir/mlp1/host-tools}"
+SOURCE_DIR="$ROOT_DIR/workdir/mlp1/yabause"
+OUTPUT_DIR="$ROOT_DIR/workdir/mlp1/host-tools"
 DOCKER="${DOCKER:-docker}"
 HOST_TOOLS_IMAGE="${HOST_TOOLS_IMAGE:-gcc@sha256:3e239a5ea77200b9163c825a0a5ebc17ca99f3bbb4d08241ee0fb9c174325880}"
 

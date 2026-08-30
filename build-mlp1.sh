@@ -8,8 +8,8 @@ HOST_TOOLS_IMAGE="${HOST_TOOLS_IMAGE:-gcc@sha256:3e239a5ea77200b9163c825a0a5ebc1
 BUILD_JOBS="${BUILD_JOBS:-}"
 MLP1_BUILD_PROFILE="${MLP1_BUILD_PROFILE:-perf}"
 FLAGS_DIR="${MLP1_FLAGS_DIR:-}"
-SOURCE_DIR="${YABASANSHIRO_SOURCE_DIR:-$ROOT_DIR/workdir/mlp1/yabause}"
-ARTIFACT_DIR="${MLP1_ARTIFACT_DIR:-$ROOT_DIR/output/mlp1/build}"
+SOURCE_DIR="$ROOT_DIR/workdir/mlp1/yabause"
+ARTIFACT_DIR="$ROOT_DIR/output/mlp1/build"
 
 for command_name in git jq shasum; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -71,8 +71,14 @@ dynamic_dependencies="$(
         jq -Rsc 'split("\n") | map(select(length > 0))'
 )"
 patches="$(
-    awk '{ print $2 }' "$ARTIFACT_DIR/provenance/patches.sha256" |
-        jq -Rsc 'split("\n") | map(select(length > 0))'
+    awk '{ print $1 "\t" $2 "\tnot-submitted" }' \
+        "$ARTIFACT_DIR/provenance/patches.sha256" |
+        jq -Rsc '
+          split("\n") |
+          map(select(length > 0) | split("\t") | {
+            sha256: .[0], path: .[1], upstream_status: .[2]
+          })
+        '
 )"
 submodules="$(
     sed 's/^[ +-]//' "$ARTIFACT_DIR/provenance/submodules.txt" |
@@ -126,7 +132,7 @@ jq -n \
       submodules: $submodules,
       timestamp_policy: "SOURCE_DATE_EPOCH equals the pinned source commit time; no wall-clock timestamp is recorded",
       distribution_status: "blocked-pending-gpl-eula-review"
-    }' >"$ARTIFACT_DIR/build-manifest.json"
+    }' >"$ARTIFACT_DIR/provenance/build-manifest.json"
 
 printf 'Built YabaSanshiro %s for MLP1: %s\n' \
     "$YABASANSHIRO_UPSTREAM_VERSION" "$binary_sha"
