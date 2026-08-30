@@ -1,0 +1,94 @@
+From: Utility Muffin Research Kitchen <umrk@users.noreply.github.com>
+Subject: [PATCH] Allow native generators during cross builds
+
+The Musashi opcode generator and NanoGUI resource converter must execute on
+the build host.  Accept explicit native tools while preserving the upstream
+behavior for non-cross builds.  Also retain caller-provided C++ flags.
+---
+ yabause/src/CMakeLists.txt                         | 29 +++++++++++++++-------
+ .../retro_arena/nanogui-sdl/CMakeLists.txt         | 18 ++++++++++----
+ 2 files changed, 34 insertions(+), 13 deletions(-)
+
+diff --git a/yabause/src/CMakeLists.txt b/yabause/src/CMakeLists.txt
+--- a/yabause/src/CMakeLists.txt
++++ b/yabause/src/CMakeLists.txt
+@@ -724,14 +724,29 @@ if (YAB_WANT_MUSASHI)
+     set (MUSASHI_GENERATED_HEADERS
+         ${CMAKE_CURRENT_BINARY_DIR}/musashi/m68kops.h)
+ 
+-    include(ExternalProject)
+-    ExternalProject_Add(m68kmake
+-        DOWNLOAD_COMMAND ""
+-        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/musashi
+-        CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+-        INSTALL_COMMAND ""
+-        BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/musashi
+-    )
++    if (YABASANSHIRO_HOST_M68KMAKE)
++        add_custom_command(
++            OUTPUT ${MUSASHI_GENERATED_SOURCES} ${MUSASHI_GENERATED_HEADERS}
++            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/musashi
++            COMMAND ${YABASANSHIRO_HOST_M68KMAKE}
++                    ${CMAKE_CURRENT_BINARY_DIR}/musashi/
++                    ${CMAKE_CURRENT_SOURCE_DIR}/musashi/m68k_in.c
++            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/musashi/m68k_in.c
++                    ${YABASANSHIRO_HOST_M68KMAKE}
++            COMMENT "Generating musashi 68k core with the host tool"
++            VERBATIM)
++        add_custom_target(m68kmake DEPENDS
++            ${MUSASHI_GENERATED_SOURCES} ${MUSASHI_GENERATED_HEADERS})
++    else()
++        include(ExternalProject)
++        ExternalProject_Add(m68kmake
++            DOWNLOAD_COMMAND ""
++            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/musashi
++            CMAKE_GENERATOR "${CMAKE_GENERATOR}"
++            INSTALL_COMMAND ""
++            BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/musashi
++        )
++    endif()
+ 
+     add_definitions(-DHAVE_MUSASHI=1)
+ 
+diff --git a/yabause/src/retro_arena/nanogui-sdl/CMakeLists.txt b/yabause/src/retro_arena/nanogui-sdl/CMakeLists.txt
+--- a/yabause/src/retro_arena/nanogui-sdl/CMakeLists.txt
++++ b/yabause/src/retro_arena/nanogui-sdl/CMakeLists.txt
+@@ -3,7 +3,7 @@ cmake_minimum_required (VERSION 2.8.3)
+ project("NanoGUI-SDL")
+ 
+ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+-    set(CMAKE_CXX_FLAGS "-std=c++11")
++    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+ endif()
+ 
+ if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/eigen/Eigen")
+@@ -116,8 +116,16 @@ endif()
+ 
+ include_directories(ext ext/eigen include ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+ 
+-# Run simple C converter to put font files into the data segment
+-add_executable(bin2c resources/bin2c.c)
++# Run simple C converter to put font files into the data segment. Cross builds
++# pass a native executable because a target AArch64 binary cannot run here.
++if(YABASANSHIRO_HOST_BIN2C)
++  set(bin2c_command ${YABASANSHIRO_HOST_BIN2C})
++  set(bin2c_dependencies ${YABASANSHIRO_HOST_BIN2C})
++else()
++  add_executable(bin2c resources/bin2c.c)
++  set(bin2c_command $<TARGET_FILE:bin2c>)
++  set(bin2c_dependencies bin2c)
++endif()
+ set(bin2c_cmdline nanogui_resources.cpp nanogui_resources.h)
+ file(GLOB resources "${CMAKE_CURRENT_SOURCE_DIR}/resources/*.ttf")
+ foreach(file ${resources})
+@@ -127,8 +135,8 @@ endforeach()
+ # Run bin2c on resource files
+ add_custom_command(
+   OUTPUT nanogui_resources.cpp nanogui_resources.h
+-  COMMAND ./bin2c ARGS ${bin2c_cmdline}
+-  DEPENDS bin2c ${resources}
++  COMMAND ${bin2c_command} ${bin2c_cmdline}
++  DEPENDS ${bin2c_dependencies} ${resources}
+   COMMENT "Running bin2c"
+   PRE_BUILD VERBATIM)
+ 
