@@ -10,9 +10,11 @@ PATCH_DIR="$ROOT_DIR/patches"
 
 mkdir -p "$(dirname "$SOURCE_DIR")"
 
+fresh_checkout=0
 if [ ! -d "$SOURCE_DIR/.git" ]; then
     git clone --filter=blob:none --no-checkout \
         "$YABASANSHIRO_UPSTREAM_URL" "$SOURCE_DIR"
+    fresh_checkout=1
 fi
 
 git -C "$SOURCE_DIR" fetch --force origin \
@@ -32,7 +34,8 @@ done < <(find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' | LC_ALL=C sort)
 
 # A completed build leaves only this repository's deterministic patches
 # applied. Reverse that exact set, then refuse to overwrite any other edit.
-if [ -n "$(git -C "$SOURCE_DIR" status --short --untracked-files=all)" ]; then
+if [ "$fresh_checkout" -eq 0 ] && \
+        [ -n "$(git -C "$SOURCE_DIR" status --short --untracked-files=all)" ]; then
     for ((index=${#PATCHES[@]} - 1; index >= 0; index--)); do
         patch_path="${PATCHES[$index]}"
         if git -C "$SOURCE_DIR" apply --reverse --check \
