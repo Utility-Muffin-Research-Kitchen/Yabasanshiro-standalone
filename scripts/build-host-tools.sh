@@ -15,8 +15,10 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 "$DOCKER" run --rm --platform linux/arm64 \
+    --user "$(id -u):$(id -g)" \
     -v "$ROOT_DIR":/build \
     -w /build \
+    -e HOME=/tmp \
     "$HOST_TOOLS_IMAGE" \
     sh -lc '
         set -eu

@@ -9,10 +9,13 @@ ARTIFACT_DIR=/build/output/mlp1/build
 
 # GitHub's container user does not own the bind-mounted runner checkout.
 # Trust only the pinned source repositories mounted for this ephemeral build.
-git config --global --add safe.directory "$SOURCE_DIR"
-git config --global --add safe.directory "$SOURCE_DIR/yabause/src/android/oboe"
-git config --global --add safe.directory \
-    "$SOURCE_DIR/yabause/src/retro_arena/nanogui-sdl/ext/eigen"
+(
+    cd /tmp
+    git config --global --add safe.directory "$SOURCE_DIR"
+    git config --global --add safe.directory "$SOURCE_DIR/yabause/src/android/oboe"
+    git config --global --add safe.directory \
+        "$SOURCE_DIR/yabause/src/retro_arena/nanogui-sdl/ext/eigen"
+)
 
 # shellcheck source=/dev/null
 . /umrk-flags/mlp1-build-flags.env

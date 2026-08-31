@@ -43,11 +43,13 @@ DOCKER="$DOCKER" HOST_TOOLS_IMAGE="$HOST_TOOLS_IMAGE" \
 
 mkdir -p "$ROOT_DIR/output/mlp1"
 "$DOCKER" run --rm \
+    --user "$(id -u):$(id -g)" \
     -v "$ROOT_DIR":/build \
     -v "$FLAGS_DIR":/umrk-flags:ro \
     -w /build \
     -e BUILD_JOBS="$BUILD_JOBS" \
     -e MLP1_BUILD_PROFILE="$MLP1_BUILD_PROFILE" \
+    -e HOME=/tmp \
     "$TOOLCHAIN_IMAGE" \
     bash /build/scripts/build-mlp1-in-docker.sh
 
