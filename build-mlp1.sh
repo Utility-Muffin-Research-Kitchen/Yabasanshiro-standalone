@@ -131,7 +131,9 @@ jq -n \
       patches: $patches,
       submodules: $submodules,
       timestamp_policy: "SOURCE_DATE_EPOCH equals the pinned source commit time; no wall-clock timestamp is recorded",
-      distribution_status: "blocked-pending-gpl-eula-review"
+      license: "GPL-2.0",
+      distribution_status: "release-owner-approved-gpl-2.0-basis",
+      distribution_basis: "licenses/DISTRIBUTION-BASIS.md"
     }' >"$ARTIFACT_DIR/provenance/build-manifest.json"
 
 printf 'Built YabaSanshiro %s for MLP1: %s\n' \

@@ -20,10 +20,9 @@ for required_path in \
     "$ROOT_DIR/config/mlp1/launch.sh" \
     "$ROOT_DIR/config/mlp1/defaults/config.version" \
     "$ROOT_DIR/config/mlp1/defaults/es_temporaryinput.cfg" \
-    "$ROOT_DIR/licenses/RELEASE-BLOCKED.txt" \
+    "$ROOT_DIR/licenses/DISTRIBUTION-BASIS.md" \
     "$SOURCE_DIR/LICENSE" \
     "$SOURCE_DIR/yabause/COPYING.txt" \
-    "$SOURCE_DIR/yabause/EULA.txt" \
     "$SOURCE_DIR/yabause/src/retro_arena/nanogui-sdl/LICENSE.txt" \
     "$SOURCE_DIR/yabause/src/retro_arena/pugixml/pugixml_license.txt" \
     "$CMAKE_DIR/src/retro_arena/Json/src/Json/LICENSE.MIT" \
@@ -45,14 +44,12 @@ install -m 0644 "$ROOT_DIR/config/mlp1/defaults/config.version" \
     "$OUTPUT_DIR/defaults/config.version"
 install -m 0644 "$ROOT_DIR/config/mlp1/defaults/es_temporaryinput.cfg" \
     "$OUTPUT_DIR/defaults/es_temporaryinput.cfg"
-install -m 0644 "$ROOT_DIR/licenses/RELEASE-BLOCKED.txt" \
-    "$OUTPUT_DIR/licenses/RELEASE-BLOCKED.txt"
+install -m 0644 "$ROOT_DIR/licenses/DISTRIBUTION-BASIS.md" \
+    "$OUTPUT_DIR/licenses/DISTRIBUTION-BASIS.md"
 install -m 0644 "$SOURCE_DIR/LICENSE" \
     "$OUTPUT_DIR/licenses/upstream-LICENSE.txt"
 install -m 0644 "$SOURCE_DIR/yabause/COPYING.txt" \
     "$OUTPUT_DIR/licenses/Yabause-GPL-2.0.txt"
-install -m 0644 "$SOURCE_DIR/yabause/EULA.txt" \
-    "$OUTPUT_DIR/licenses/upstream-EULA.txt"
 install -m 0644 "$SOURCE_DIR/yabause/src/retro_arena/nanogui-sdl/LICENSE.txt" \
     "$OUTPUT_DIR/licenses/NanoGUI-BSD-3-Clause.txt"
 install -m 0644 "$SOURCE_DIR/yabause/src/retro_arena/pugixml/pugixml_license.txt" \
@@ -65,10 +62,13 @@ install -m 0644 "$CMAKE_DIR/src/libchdr-prefix/src/libchdr/LICENSE.txt" \
 cp -R "$BUILD_DIR/provenance/." "$OUTPUT_DIR/provenance/"
 
 cat >"$OUTPUT_DIR/README.txt" <<'EOF'
-Internal YabaSanshiro standalone performance probe for Leaf on MLP1.
+YabaSanshiro standalone performance probe for Leaf on MLP1.
 
-This package contains no BIOS or game content. It is not approved for public
-binary distribution. RetroArch remains the Saturn default.
+This package contains no BIOS or game content. The GPL-covered program is
+distributed under GPLv2 without imposing the conflicting upstream EULA. See
+licenses/DISTRIBUTION-BASIS.md for the recorded distribution basis. RetroArch
+remains the Saturn default while the remaining technical and product gates are
+evaluated.
 
 The MLP1 port forces the native renderer and menu into the panel's landscape
 orientation. HLE BIOS is the tested default; an external BIOS remains available
@@ -110,4 +110,4 @@ jq \
     }' "$BUILD_DIR/provenance/build-manifest.json" >"$OUTPUT_DIR/manifest.json"
 
 "$ROOT_DIR/scripts/verify-mlp1-package.sh" "$OUTPUT_DIR"
-printf 'Packaged internal MLP1 probe: %s\n' "$OUTPUT_DIR"
+printf 'Packaged MLP1 probe: %s\n' "$OUTPUT_DIR"

@@ -1,8 +1,0 @@
-YabaSanshiro standalone binary distribution is intentionally blocked.
-
-The pinned source contains GPL-2.0 license material and a separate EULA whose
-restrictions appear inconsistent with that grant. The internal device probe may
-continue, but no binary may be published, tagged, or included in a Leaf release
-until the release owner accepts a documented distribution basis.
-
-This notice records a release gate; it is not a legal conclusion.

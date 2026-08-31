@@ -10,8 +10,13 @@ for required_path in \
     "$PACKAGE_DIR/launch.sh" \
     "$PACKAGE_DIR/defaults/config.version" \
     "$PACKAGE_DIR/defaults/es_temporaryinput.cfg" \
-    "$PACKAGE_DIR/licenses/RELEASE-BLOCKED.txt" \
-    "$PACKAGE_DIR/licenses/upstream-EULA.txt" \
+    "$PACKAGE_DIR/licenses/DISTRIBUTION-BASIS.md" \
+    "$PACKAGE_DIR/licenses/upstream-LICENSE.txt" \
+    "$PACKAGE_DIR/licenses/Yabause-GPL-2.0.txt" \
+    "$PACKAGE_DIR/licenses/NanoGUI-BSD-3-Clause.txt" \
+    "$PACKAGE_DIR/licenses/pugixml-MIT.txt" \
+    "$PACKAGE_DIR/licenses/nlohmann-json-MIT.txt" \
+    "$PACKAGE_DIR/licenses/libchdr-BSD-3-Clause.txt" \
     "$PACKAGE_DIR/provenance/build-manifest.json" \
     "$PACKAGE_DIR/provenance/build-flags.env" \
     "$PACKAGE_DIR/provenance/elf-dynamic.txt" \
@@ -32,6 +37,14 @@ if find "$PACKAGE_DIR" -type l -print -quit | grep -q .; then
     echo "package is not FAT32-safe: symlink found" >&2
     exit 1
 fi
+for excluded_term in \
+    "$PACKAGE_DIR/licenses/RELEASE-BLOCKED.txt" \
+    "$PACKAGE_DIR/licenses/upstream-EULA.txt"; do
+    if [ -e "$excluded_term" ]; then
+        echo "contradictory distribution term found: $excluded_term" >&2
+        exit 1
+    fi
+done
 
 bash -n "$PACKAGE_DIR/launch.sh"
 if command -v xmllint >/dev/null 2>&1; then
@@ -44,7 +57,9 @@ jq -e '
   .id == "yabasanshiro_standalone" and
   .platform == "mlp1" and
   .kind == "standalone-emulator-probe" and
-  .distribution_status == "blocked-pending-gpl-eula-review" and
+  .license == "GPL-2.0" and
+  .distribution_status == "release-owner-approved-gpl-2.0-basis" and
+  .distribution_basis == "licenses/DISTRIBUTION-BASIS.md" and
   .package_schema_version == 1 and
   .config_schema_version == 2 and
   (.patches | type == "array" and length > 0) and
@@ -94,5 +109,5 @@ for forbidden_name in BIOS Roms Saves States backup.bin keymapv2.json '*.yss'; d
     fi
 done
 
-printf 'Verified internal MLP1 probe package: %s files\n' \
+printf 'Verified MLP1 probe package: %s files\n' \
     "$(jq '.files | length' "$MANIFEST")"
