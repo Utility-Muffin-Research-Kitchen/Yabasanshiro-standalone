@@ -1,7 +1,7 @@
 # YabaSanshiro standalone for Leaf
 
 This repository builds the non-libretro `retro_arena` YabaSanshiro frontend for
-the Miniloong Pocket 1 (RK3566/Cortex-A55). The reference probe is pinned to the
+the Miniloong Pocket 1 (RK3566/Cortex-A55). The port is pinned to the
 revision carried by ROCKNIX and builds with the shared UMRK MLP1 toolchain,
 GLES 3, SDL2, and the AArch64 devMiyax dynarec.
 
@@ -18,9 +18,14 @@ provenance are written below `output/mlp1/`.
 archive. The source archive contains the exact patched upstream tree, recursive
 submodules, the pinned nlohmann/json and libchdr sources, this repository's
 build and packaging code, build provenance, licence texts, and `SHA256SUMS`.
-Publish that archive and its `.sha256` file beside every binary download; the
-public repository alone is not treated as the release's self-contained source
-artifact.
+Publish that archive and its `.sha256` file before the matching Leaf binary
+release. Leaf records a direct link to the exact asset; the public repository
+alone is not treated as the release's self-contained source artifact.
+
+Leaf release builds set `YABASANSHIRO_SOURCE_URL` and
+`YABASANSHIRO_SOURCE_SHA256` so the runtime package records the exact source
+asset published by this repository. Local development packages point at the
+repository and leave the source checksum empty.
 
 The MLP1 wrapper forces YabaSanshiro's native 90-degree gameplay rotation and
 uses a small NanoGUI-only transform for the native menu. Normal gameplay does
@@ -34,11 +39,10 @@ the source patch's backup and state overrides so `backup.bin` is written to
 `$SAVES_PATH/YabaSanshiro` and native `.yss` files to
 `$STATES_PATH/YabaSanshiro`.
 
-This remains a performance probe and RetroArch remains Leaf's default Saturn
-emulator. The release owner has approved distribution of the GPL-covered
-program under GPLv2 without imposing the conflicting upstream EULA; see
-`licenses/DISTRIBUTION-BASIS.md`. Publication still depends on the remaining
-source/asset inventory, technical, and product gates.
+RetroArch remains Leaf's default Saturn emulator. The standalone build is an
+optional, faster route. The release owner has approved distribution of the
+GPL-covered program under GPLv2 without imposing the conflicting upstream
+EULA; see `licenses/DISTRIBUTION-BASIS.md`.
 
 The MIT license in this repository covers UMRK's build and packaging code, not
 the separately fetched emulator source or the resulting binary.

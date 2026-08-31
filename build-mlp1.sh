@@ -106,7 +106,7 @@ jq -n \
       id: $id,
       name: "YabaSanshiro Standalone",
       platform: "mlp1",
-      kind: "standalone-emulator-probe",
+      kind: "standalone-emulator",
       upstream_url: $upstream_url,
       upstream_branch: $upstream_branch,
       upstream_version: $upstream_version,

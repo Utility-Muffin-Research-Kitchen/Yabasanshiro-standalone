@@ -170,4 +170,4 @@ if "$PACKAGE_DIR/launch.sh" "$TMP_ROOT/missing.chd" >/dev/null 2>&1; then
     exit 1
 fi
 
-printf 'Verified probe wrapper quoting, input seed, roster, and BIOS policy\n'
+printf 'Verified wrapper quoting, input seed, roster, and BIOS policy\n'

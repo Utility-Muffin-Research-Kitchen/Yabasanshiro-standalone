@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout MLP1 toolchain flags
+        uses: actions/checkout@v4
+        with:
+          repository: Utility-Muffin-Research-Kitchen/mlp1-toolchain
+          path: mlp1-toolchain
+
+      - name: Build runtime and corresponding source
+        env:
+          MLP1_FLAGS_DIR: ${{ github.workspace }}/mlp1-toolchain/flags
+          TOOLCHAIN_IMAGE: ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:latest
+        run: |
+          docker pull "$TOOLCHAIN_IMAGE"
+          make package-release BUILD_JOBS=4
+
+      - name: Verify packages and reproducible source
+        run: |
+          make smoke-launch-wrapper verify-package-mlp1
+          archive=$(find output/mlp1/source -maxdepth 1 -name '*-source.tar.gz' -print -quit)
+          first=$(sha256sum "$archive" | awk '{print $1}')
+          ./scripts/package-source.sh
+          second=$(sha256sum "$archive" | awk '{print $1}')
+          test "$first" = "$second"
+          (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yabasanshiro-mlp1
+          path: |
+            output/mlp1/yabasanshiro
+            output/mlp1/source/*.tar.gz
+            output/mlp1/source/*.sha256
+          if-no-files-found: error

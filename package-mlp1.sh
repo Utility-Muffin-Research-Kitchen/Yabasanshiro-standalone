@@ -7,6 +7,17 @@ OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/output/mlp1/yabasanshiro}"
 SOURCE_DIR="$ROOT_DIR/workdir/mlp1/yabause"
 CMAKE_DIR="$ROOT_DIR/output/mlp1/cmake"
 
+# shellcheck disable=SC1091
+. "$ROOT_DIR/upstream.env"
+
+SOURCE_ARCHIVE_NAME="yabasanshiro-standalone-${YABASANSHIRO_UPSTREAM_VERSION}-mlp1-source.tar.gz"
+SOURCE_URL="${YABASANSHIRO_SOURCE_URL:-https://github.com/Utility-Muffin-Research-Kitchen/Yabasanshiro-standalone}"
+SOURCE_SHA256="${YABASANSHIRO_SOURCE_SHA256:-}"
+if [ -n "$SOURCE_SHA256" ] && [[ ! "$SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "invalid YABASANSHIRO_SOURCE_SHA256" >&2
+    exit 1
+fi
+
 for command_name in jq shasum file; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "missing package command: $command_name" >&2
@@ -61,19 +72,19 @@ install -m 0644 "$CMAKE_DIR/src/libchdr-prefix/src/libchdr/LICENSE.txt" \
 
 cp -R "$BUILD_DIR/provenance/." "$OUTPUT_DIR/provenance/"
 
-cat >"$OUTPUT_DIR/README.txt" <<'EOF'
-YabaSanshiro standalone performance probe for Leaf on MLP1.
+cat >"$OUTPUT_DIR/README.txt" <<EOF
+YabaSanshiro standalone emulator for Leaf on MLP1.
 
 This package contains no BIOS or game content. The GPL-covered program is
 distributed under GPLv2 without imposing the conflicting upstream EULA. See
 licenses/DISTRIBUTION-BASIS.md for the recorded distribution basis. RetroArch
-remains the Saturn default while the remaining technical and product gates are
-evaluated.
+remains the Saturn default; this standalone build is an optional faster route.
 
-The corresponding source is distributed as a separate
-yabasanshiro-standalone-*-source.tar.gz archive beside this binary package.
-It includes the exact patched source, dependency source, build scripts,
-licences, provenance, and checksums used for this build.
+Corresponding source: $SOURCE_URL
+Archive name: $SOURCE_ARCHIVE_NAME
+
+The archive includes the exact patched source, dependency source, build
+scripts, licences, provenance, and checksums used for this build.
 
 The MLP1 port forces the native renderer and menu into the panel's landscape
 orientation. HLE BIOS is the tested default; an external BIOS remains available
@@ -107,12 +118,20 @@ files_json="$(
 jq \
     --argjson package_schema_version 1 \
     --argjson config_schema_version "$config_version" \
+    --arg source_url "$SOURCE_URL" \
+    --arg source_archive "$SOURCE_ARCHIVE_NAME" \
+    --arg source_sha256 "$SOURCE_SHA256" \
     --argjson files "$files_json" \
     '. + {
       package_schema_version: $package_schema_version,
       config_schema_version: $config_schema_version,
+      corresponding_source: {
+        url: $source_url,
+        archive: $source_archive,
+        sha256: (if $source_sha256 == "" then null else $source_sha256 end)
+      },
       files: $files
     }' "$BUILD_DIR/provenance/build-manifest.json" >"$OUTPUT_DIR/manifest.json"
 
 "$ROOT_DIR/scripts/verify-mlp1-package.sh" "$OUTPUT_DIR"
-printf 'Packaged MLP1 probe: %s\n' "$OUTPUT_DIR"
+printf 'Packaged MLP1 emulator: %s\n' "$OUTPUT_DIR"

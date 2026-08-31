@@ -23,7 +23,7 @@ for required_path in \
     "$PACKAGE_DIR/provenance/patches.sha256" \
     "$MANIFEST"; do
     if [ ! -f "$required_path" ]; then
-        echo "missing required probe package file: $required_path" >&2
+        echo "missing required emulator package file: $required_path" >&2
         exit 1
     fi
 done
@@ -56,10 +56,15 @@ file "$PACKAGE_DIR/bin/yabasanshiro" |
 jq -e '
   .id == "yabasanshiro_standalone" and
   .platform == "mlp1" and
-  .kind == "standalone-emulator-probe" and
+  .kind == "standalone-emulator" and
   .license == "GPL-2.0" and
   .distribution_status == "release-owner-approved-gpl-2.0-basis" and
   .distribution_basis == "licenses/DISTRIBUTION-BASIS.md" and
+  (.corresponding_source | type == "object") and
+  (.corresponding_source.url | type == "string" and length > 0) and
+  .corresponding_source.archive == "yabasanshiro-standalone-1.11.beta3-mlp1-source.tar.gz" and
+  (.corresponding_source.sha256 == null or
+    (.corresponding_source.sha256 | test("^[0-9a-f]{64}$"))) and
   .package_schema_version == 1 and
   .config_schema_version == 2 and
   (.patches | type == "array" and length > 0) and
@@ -109,5 +114,5 @@ for forbidden_name in BIOS Roms Saves States backup.bin keymapv2.json '*.yss'; d
     fi
 done
 
-printf 'Verified MLP1 probe package: %s files\n' \
+printf 'Verified MLP1 emulator package: %s files\n' \
     "$(jq '.files | length' "$MANIFEST")"
