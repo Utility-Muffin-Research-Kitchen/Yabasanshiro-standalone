@@ -8,10 +8,19 @@ GLES 3, SDL2, and the AArch64 devMiyax dynarec.
 ```sh
 make build-mlp1
 make verify-mlp1
+make package-release
 ```
 
 `workdir/` contains the ignored, patched upstream checkout. Build products and
 provenance are written below `output/mlp1/`.
+
+`make package-release` produces both the MLP1 binary package and a GPL source
+archive. The source archive contains the exact patched upstream tree, recursive
+submodules, the pinned nlohmann/json and libchdr sources, this repository's
+build and packaging code, build provenance, licence texts, and `SHA256SUMS`.
+Publish that archive and its `.sha256` file beside every binary download; the
+public repository alone is not treated as the release's self-contained source
+artifact.
 
 The MLP1 wrapper forces YabaSanshiro's native 90-degree gameplay rotation and
 uses a small NanoGUI-only transform for the native menu. Normal gameplay does

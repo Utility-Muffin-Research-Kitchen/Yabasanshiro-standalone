@@ -7,7 +7,8 @@ BUILD_JOBS ?=
 MLP1_BUILD_PROFILE ?= perf
 
 .PHONY: fetch-upstream build-host-tools build-mlp1 verify-mlp1 \
-	package-mlp1 verify-package-mlp1 smoke-launch-wrapper clean
+	package-mlp1 package-source package-release verify-package-mlp1 \
+	smoke-launch-wrapper clean
 
 fetch-upstream:
 	./scripts/fetch-upstream.sh
@@ -30,6 +31,11 @@ verify-mlp1: build-mlp1
 
 package-mlp1: build-mlp1
 	./package-mlp1.sh
+
+package-source: build-mlp1
+	./scripts/package-source.sh
+
+package-release: package-mlp1 package-source
 
 verify-package-mlp1:
 	./scripts/verify-mlp1-package.sh

@@ -70,6 +70,11 @@ licenses/DISTRIBUTION-BASIS.md for the recorded distribution basis. RetroArch
 remains the Saturn default while the remaining technical and product gates are
 evaluated.
 
+The corresponding source is distributed as a separate
+yabasanshiro-standalone-*-source.tar.gz archive beside this binary package.
+It includes the exact patched source, dependency source, build scripts,
+licences, provenance, and checksums used for this build.
+
 The MLP1 port forces the native renderer and menu into the panel's landscape
 orientation. HLE BIOS is the tested default; an external BIOS remains available
 as an explicit YABASANSHIRO_BIOS_MODE=external compatibility override.
