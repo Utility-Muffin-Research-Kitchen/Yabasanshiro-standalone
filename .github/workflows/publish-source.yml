@@ -1,0 +1,70 @@
+name: Publish corresponding source
+
+on:
+  workflow_dispatch:
+    inputs:
+      leaf_release_tag:
+        description: Exact Leaf release tag, for example v0.9.0-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: yabasanshiro-source-${{ inputs.leaf_release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require main and a new release tag
+        env:
+          LEAF_RELEASE_TAG: ${{ inputs.leaf_release_tag }}
+          SELECTED_REF: ${{ github.ref }}
+        run: |
+          test "$SELECTED_REF" = refs/heads/main
+          [[ "$LEAF_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          if git ls-remote --exit-code --tags origin "refs/tags/$LEAF_RELEASE_TAG" >/dev/null 2>&1; then
+            echo "tag already exists: $LEAF_RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - name: Checkout MLP1 toolchain flags
+        uses: actions/checkout@v4
+        with:
+          repository: Utility-Muffin-Research-Kitchen/mlp1-toolchain
+          path: mlp1-toolchain
+
+      - name: Build and verify source archive
+        env:
+          MLP1_FLAGS_DIR: ${{ github.workspace }}/mlp1-toolchain/flags
+          TOOLCHAIN_IMAGE: ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:latest
+        run: |
+          docker pull "$TOOLCHAIN_IMAGE"
+          make package-source BUILD_JOBS=4
+          archive=$(find output/mlp1/source -maxdepth 1 -name '*-source.tar.gz' -print -quit)
+          first=$(sha256sum "$archive" | awk '{print $1}')
+          ./scripts/package-source.sh
+          second=$(sha256sum "$archive" | awk '{print $1}')
+          test "$first" = "$second"
+          (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+
+      - name: Publish source-only release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEAF_RELEASE_TAG: ${{ inputs.leaf_release_tag }}
+        run: |
+          git tag "$LEAF_RELEASE_TAG"
+          git push origin "$LEAF_RELEASE_TAG"
+          gh release create "$LEAF_RELEASE_TAG" \
+            output/mlp1/source/*-source.tar.gz \
+            output/mlp1/source/*-source.tar.gz.sha256 \
+            --title "YabaSanshiro source for Leaf $LEAF_RELEASE_TAG" \
+            --notes "Corresponding source for the YabaSanshiro standalone runtime distributed by Leaf $LEAF_RELEASE_TAG. This release contains source and checksums only; the runnable emulator is packaged with Leaf."

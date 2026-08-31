@@ -1,0 +1,41 @@
+From: Utility Muffin Research Kitchen <umrk@users.noreply.github.com>
+Subject: [PATCH] Accept separate backup RAM and save-state paths
+
+Keep retro_arena configuration under HOME, but let the Leaf wrapper place
+backup RAM and native states in their source-aligned durable roots. Preserve
+upstream paths when the variables are absent.
+---
+
+diff --git a/yabause/src/retro_arena/main.cpp b/yabause/src/retro_arena/main.cpp
+index 3b3b581c..271ce6f6 100644
+--- a/yabause/src/retro_arena/main.cpp
++++ b/yabause/src/retro_arena/main.cpp
+@@ -295,9 +295,23 @@ int main(int argc, char** argv)
+   if (stat(home_dir.c_str(), &st) == -1) {
+     mkdir(home_dir.c_str(), 0700);
+   }  
+-  std::string bckup_dir = home_dir + "backup.bin";
+-  strcpy( buppath, bckup_dir.c_str() );
+-  strcpy( s_savepath, home_dir.c_str() );
++  const char *backup_path = getenv("YABASANSHIRO_BACKUP_PATH");
++  const char *state_dir = getenv("YABASANSHIRO_STATE_DIR");
++  std::string backup_file =
++      backup_path != nullptr && backup_path[0] != '\0'
++          ? backup_path
++          : home_dir + "backup.bin";
++  std::string state_directory =
++      state_dir != nullptr && state_dir[0] != '\0'
++          ? state_dir
++          : home_dir;
++  if (backup_file.size() >= sizeof(buppath) ||
++      state_directory.size() >= sizeof(s_savepath)) {
++    fprintf(stderr, "YabaSanshiro runtime path is too long\n");
++    return 1;
++  }
++  strcpy( buppath, backup_file.c_str() );
++  strcpy( s_savepath, state_directory.c_str() );
+   g_keymap_filename = home_dir + "keymapv2.json";
+ 
+   std::string current_exec_name = argv[0]; // Name of the current exec program
+-- 
+2.39.5
