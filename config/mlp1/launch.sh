@@ -116,32 +116,83 @@ export YABASANSHIRO_BACKUP_PATH="$BACKUP_DIR/backup.bin"
 export YABASANSHIRO_STATE_DIR="$STATE_DIR"
 export YABASANSHIRO_MLP1_ROTATE_90=1
 
+# BIOS selection. Two callers, one behavior each:
+#
+#   Leaf's launcher resolves the user's choice and hands over an explicit
+#   YABASANSHIRO_BIOS_FILE with MODE=external. That exact path is used, whatever
+#   it is named and wherever on either card it lives, and it is only ever
+#   quoted into bios_args -- never evaluated as shell.
+#
+#   A direct caller that sets no FILE keeps the original hle|external|auto mode
+#   semantics over the standard $BIOS_PATH/SATURN/saturn_bios.bin. auto exists only for
+#   those callers; the Leaf picker never offers it and never resolves to it.
+#
+# An explicit FILE is checked immediately before exec because a card can be
+# pulled after the launcher validated it. Nothing here falls back: a selection
+# the user made and cannot be honored is an error, not a silent switch to HLE
+# or to some other image.
 bios_args=()
 bios_mode="${YABASANSHIRO_BIOS_MODE:-hle}"
 selected_bios_path=""
-if [ -f "$BIOS_PATH/saturn_bios.bin" ]; then
-    selected_bios_path="$BIOS_PATH/saturn_bios.bin"
-fi
-case "$bios_mode" in
-    auto|external)
-        if [ -n "$selected_bios_path" ]; then
-            bios_args=(-b "$selected_bios_path")
-            selected_bios=external
-        elif [ "$bios_mode" = external ]; then
-            echo "external Saturn BIOS not found: $BIOS_PATH/saturn_bios.bin" >&2
-            exit 1
-        else
-            selected_bios=hle
-        fi
-        ;;
-    hle)
-        selected_bios=hle
-        ;;
-    *)
-        echo "unsupported YABASANSHIRO_BIOS_MODE: $bios_mode" >&2
+selected_bios_source=standard
+standard_bios_path="$BIOS_PATH/SATURN/saturn_bios.bin"
+
+if [ -n "${YABASANSHIRO_BIOS_FILE+x}" ]; then
+    explicit_bios="$YABASANSHIRO_BIOS_FILE"
+    if [ -z "$explicit_bios" ]; then
+        echo "YABASANSHIRO_BIOS_FILE is set but empty" >&2
         exit 2
-        ;;
-esac
+    fi
+    if [ "$bios_mode" != external ]; then
+        echo "YABASANSHIRO_BIOS_FILE requires YABASANSHIRO_BIOS_MODE=external, got: $bios_mode" >&2
+        exit 2
+    fi
+    if [ -L "$explicit_bios" ] || [ ! -f "$explicit_bios" ]; then
+        echo "selected Saturn BIOS is not a regular file: $explicit_bios" >&2
+        exit 1
+    fi
+    if [ ! -r "$explicit_bios" ]; then
+        echo "selected Saturn BIOS is not readable: $explicit_bios" >&2
+        exit 1
+    fi
+    # A raw Saturn BIOS is exactly 512 KiB: the emulator loads 0x80000 bytes.
+    # Size is a shape check, not proof of authenticity or game compatibility.
+    explicit_bios_size="$(wc -c <"$explicit_bios" | tr -d '[:space:]')"
+    if [ "$explicit_bios_size" != 524288 ]; then
+        echo "selected Saturn BIOS is not a 512 KiB image (${explicit_bios_size} bytes): $explicit_bios" >&2
+        exit 1
+    fi
+    selected_bios_path="$explicit_bios"
+    selected_bios_source=explicit
+    selected_bios=external
+    bios_args=(-b "$selected_bios_path")
+else
+    if [ -f "$standard_bios_path" ]; then
+        selected_bios_path="$standard_bios_path"
+    fi
+    case "$bios_mode" in
+        auto|external)
+            if [ -n "$selected_bios_path" ]; then
+                bios_args=(-b "$selected_bios_path")
+                selected_bios=external
+            elif [ "$bios_mode" = external ]; then
+                echo "external Saturn BIOS not found: $standard_bios_path" >&2
+                exit 1
+            else
+                selected_bios=hle
+                selected_bios_path=""
+            fi
+            ;;
+        hle)
+            selected_bios=hle
+            selected_bios_path=""
+            ;;
+        *)
+            echo "unsupported YABASANSHIRO_BIOS_MODE: $bios_mode" >&2
+            exit 2
+            ;;
+    esac
+fi
 
 cd "$RUNTIME_DIR"
 : >"$LOG_FILE"
@@ -154,6 +205,7 @@ cd "$RUNTIME_DIR"
     printf 'backup_path=%s\n' "$YABASANSHIRO_BACKUP_PATH"
     printf 'state_dir=%s\n' "$YABASANSHIRO_STATE_DIR"
     if [ "$selected_bios" = external ]; then
+        printf 'bios_source=%s\n' "$selected_bios_source"
         printf 'bios_path=%s\n' "$selected_bios_path"
     fi
     printf 'roster_count=%s\n' "$JAWAKA_INPUT_ROSTER_COUNT"

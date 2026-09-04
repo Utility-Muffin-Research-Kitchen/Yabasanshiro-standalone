@@ -32,7 +32,9 @@ uses a small NanoGUI-only transform for the native menu. Normal gameplay does
 not incur a framebuffer rotation copy. HLE BIOS is the default because the
 pinned reference revision black-screens Shining Force III with the tested
 external BIOS; set `YABASANSHIRO_BIOS_MODE=external` for an explicit
-compatibility test.
+compatibility test. Direct wrapper callers use
+`$BIOS_PATH/SATURN/saturn_bios.bin`; Leaf's picker can select any 512 KiB file
+below `BIOS/SATURN/`.
 
 Configuration stays below `$USERDATA_PATH/yabasanshiro`; the wrapper exports
 the source patch's backup and state overrides so `backup.bin` is written to

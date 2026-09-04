@@ -65,6 +65,11 @@ jq -e '
   .corresponding_source.archive == "yabasanshiro-standalone-1.11.beta3-mlp1-source.tar.gz" and
   (.corresponding_source.sha256 == null or
     (.corresponding_source.sha256 | test("^[0-9a-f]{64}$"))) and
+  (.corresponding_source.tag == null or
+    (.corresponding_source.tag | type == "string" and length > 0 and
+      (test("/") | not))) and
+  (.corresponding_source.commit == null or
+    (.corresponding_source.commit | test("^[0-9a-f]{40}$"))) and
   .package_schema_version == 1 and
   .config_schema_version == 2 and
   (.patches | type == "array" and length > 0) and

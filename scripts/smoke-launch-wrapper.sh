@@ -11,16 +11,18 @@ USERDATA_PATH_TEST="$SDCARD_PATH_TEST/.userdata/mlp1"
 SAVES_PATH_TEST="$SDCARD_PATH_TEST/Saves"
 STATES_PATH_TEST="$SDCARD_PATH_TEST/States"
 BIOS_PATH_TEST="$SDCARD_PATH_TEST/BIOS"
+SATURN_BIOS_DIR="$BIOS_PATH_TEST/SATURN"
 LOGS_PATH_TEST="$USERDATA_PATH_TEST/logs"
 RUNTIME_PATH_TEST="$TMP_ROOT/runtime root"
 ROM_PATH="$SDCARD_PATH_TEST/Roms/SATURN/Shining Force III's \${cash}; [USA], v1.chd"
 
 mkdir -p "$PACKAGE_DIR/bin" "$PACKAGE_DIR/defaults" \
-    "$(dirname "$ROM_PATH")" "$BIOS_PATH_TEST"
+    "$(dirname "$ROM_PATH")" "$SATURN_BIOS_DIR"
 cp "$ROOT_DIR/config/mlp1/launch.sh" "$PACKAGE_DIR/launch.sh"
 cp "$ROOT_DIR/config/mlp1/defaults/config.version" "$PACKAGE_DIR/defaults/"
 cp "$ROOT_DIR/config/mlp1/defaults/es_temporaryinput.cfg" "$PACKAGE_DIR/defaults/"
-touch "$ROM_PATH" "$BIOS_PATH_TEST/saturn_bios.bin"
+touch "$ROM_PATH" "$SATURN_BIOS_DIR/saturn_bios.bin" \
+    "$BIOS_PATH_TEST/saturn_bios.bin"
 
 cat >"$PACKAGE_DIR/bin/yabasanshiro" <<'EOF'
 #!/usr/bin/env bash
@@ -50,11 +52,10 @@ printf '\n<!-- edited v1 config -->\n' >>\
     "$APP_STATE_ROOT/home/.emulationstation/es_temporaryinput.cfg"
 printf '1\n' >"$APP_STATE_ROOT/.umrk-defaults-version"
 
+# Any NAME=VALUE arguments are handed to env verbatim, so a case can set the
+# BIOS contract variables -- or deliberately leave one unset.
 run_wrapper() {
-    local -a bios_env=()
-    if [ "$#" -eq 1 ]; then
-        bios_env=(YABASANSHIRO_BIOS_MODE="$1")
-    fi
+    local -a bios_env=("$@")
     env -u UMRK_ENV_FILE \
         PLATFORM=mlp1 \
         SDCARD_PATH="$SDCARD_PATH_TEST" \
@@ -121,10 +122,111 @@ if grep -F 'arg_4=<' "$LOG_FILE" >/dev/null ||
     exit 1
 fi
 
-run_wrapper external
+run_wrapper YABASANSHIRO_BIOS_MODE=external
 grep -F 'arg_4=<-b>' "$LOG_FILE" >/dev/null
-grep -F "arg_5=<$BIOS_PATH_TEST/saturn_bios.bin>" "$LOG_FILE" >/dev/null
-grep -F "bios_path=$BIOS_PATH_TEST/saturn_bios.bin" "$LOG_FILE" >/dev/null
+grep -F "arg_5=<$SATURN_BIOS_DIR/saturn_bios.bin>" "$LOG_FILE" >/dev/null
+grep -F "bios_path=$SATURN_BIOS_DIR/saturn_bios.bin" "$LOG_FILE" >/dev/null
+grep -F 'bios_source=standard' "$LOG_FILE" >/dev/null
+
+# auto is legacy-caller-only: present here, never produced by the Leaf picker.
+run_wrapper YABASANSHIRO_BIOS_MODE=auto
+grep -F "bios_path=$SATURN_BIOS_DIR/saturn_bios.bin" "$LOG_FILE" >/dev/null
+grep -F 'bios_source=standard' "$LOG_FILE" >/dev/null
+
+# ── Explicit selected-file contract (the Leaf picker's caller shape) ────────
+# A regional, non-standard name in a subfolder, carrying spaces, quotes and
+# shell metacharacters. It must reach the emulator as one unchanged argument.
+SELECTED_DIR="$SATURN_BIOS_DIR/Saturn's dumps"
+SELECTED_BIOS="$SELECTED_DIR/Sega Saturn BIOS \$(reboot) \`x\` ;rm -rf [JP].bin"
+OTHER_BIOS="$SELECTED_DIR/Sega Saturn BIOS [EU].bin"
+mkdir -p "$SELECTED_DIR"
+for image in "$SELECTED_BIOS" "$OTHER_BIOS"; do
+    dd if=/dev/zero of="$image" bs=1024 count=512 status=none
+done
+
+run_wrapper YABASANSHIRO_BIOS_MODE=external \
+    YABASANSHIRO_BIOS_FILE="$SELECTED_BIOS"
+grep -F 'arg_4=<-b>' "$LOG_FILE" >/dev/null
+grep -F "arg_5=<$SELECTED_BIOS>" "$LOG_FILE" >/dev/null
+grep -F 'bios_mode=external' "$LOG_FILE" >/dev/null
+grep -F 'bios_source=explicit' "$LOG_FILE" >/dev/null
+grep -F "bios_path=$SELECTED_BIOS" "$LOG_FILE" >/dev/null
+if grep -F 'arg_6=<' "$LOG_FILE" >/dev/null; then
+    echo "explicit BIOS selection added stray emulator arguments" >&2
+    exit 1
+fi
+if [ ! -f "$SELECTED_BIOS" ]; then
+    echo "wrapper moved or renamed the user's BIOS file" >&2
+    exit 1
+fi
+# A valid explicit file wins over the standard filename, which is still staged.
+if grep -F "arg_5=<$SATURN_BIOS_DIR/saturn_bios.bin>" "$LOG_FILE" >/dev/null; then
+    echo "explicit BIOS selection lost to the legacy standard filename" >&2
+    exit 1
+fi
+
+# Two consecutive launches with different choices: no state carries over.
+run_wrapper YABASANSHIRO_BIOS_MODE=external \
+    YABASANSHIRO_BIOS_FILE="$OTHER_BIOS"
+grep -F "arg_5=<$OTHER_BIOS>" "$LOG_FILE" >/dev/null
+if grep -F "$SELECTED_BIOS" "$LOG_FILE" >/dev/null; then
+    echo "a previous BIOS selection leaked into the next launch" >&2
+    exit 1
+fi
+
+# Explicit HLE clears a previous file: no FILE, no -b, no bios_path.
+run_wrapper YABASANSHIRO_BIOS_MODE=hle
+grep -F 'bios_mode=hle' "$LOG_FILE" >/dev/null
+if grep -F 'arg_4=<' "$LOG_FILE" >/dev/null ||
+   grep -F 'bios_path=' "$LOG_FILE" >/dev/null; then
+    echo "explicit HLE still passed a BIOS file" >&2
+    exit 1
+fi
+
+expect_rejected() {
+    local description="$1"
+    local expected_status="$2"
+    shift 2
+    local status=0
+    run_wrapper "$@" >/dev/null 2>&1 || status=$?
+    if [ "$status" -ne "$expected_status" ]; then
+        echo "wrapper did not reject $description (exit $status)" >&2
+        exit 1
+    fi
+}
+
+expect_rejected "an empty explicit BIOS path" 2 \
+    YABASANSHIRO_BIOS_MODE=external YABASANSHIRO_BIOS_FILE=
+expect_rejected "an explicit BIOS path with a conflicting HLE mode" 2 \
+    YABASANSHIRO_BIOS_MODE=hle YABASANSHIRO_BIOS_FILE="$SELECTED_BIOS"
+expect_rejected "an explicit BIOS path with no mode at all" 2 \
+    YABASANSHIRO_BIOS_FILE="$SELECTED_BIOS"
+expect_rejected "a removed explicit BIOS file" 1 \
+    YABASANSHIRO_BIOS_MODE=external \
+    YABASANSHIRO_BIOS_FILE="$SELECTED_DIR/never staged.bin"
+
+dd if=/dev/zero of="$SELECTED_DIR/wrong-size.bin" bs=1024 count=256 status=none
+expect_rejected "a wrong-sized explicit BIOS image" 1 \
+    YABASANSHIRO_BIOS_MODE=external \
+    YABASANSHIRO_BIOS_FILE="$SELECTED_DIR/wrong-size.bin"
+
+expect_rejected "a directory named as an explicit BIOS file" 1 \
+    YABASANSHIRO_BIOS_MODE=external YABASANSHIRO_BIOS_FILE="$SELECTED_DIR"
+
+ln -s "$SELECTED_BIOS" "$SELECTED_DIR/link.bin"
+expect_rejected "a symlinked explicit BIOS file" 1 \
+    YABASANSHIRO_BIOS_MODE=external \
+    YABASANSHIRO_BIOS_FILE="$SELECTED_DIR/link.bin"
+
+chmod 000 "$OTHER_BIOS"
+if [ ! -r "$OTHER_BIOS" ]; then   # skipped when the smoke runs as root
+    expect_rejected "an unreadable explicit BIOS file" 1 \
+        YABASANSHIRO_BIOS_MODE=external YABASANSHIRO_BIOS_FILE="$OTHER_BIOS"
+fi
+chmod 644 "$OTHER_BIOS"
+
+# Back to the default caller shape for the input-config cases below.
+run_wrapper
 
 printf '\n<!-- user edit -->\n' >>\
     "$APP_STATE_ROOT/home/.emulationstation/es_temporaryinput.cfg"
@@ -170,4 +272,4 @@ if "$PACKAGE_DIR/launch.sh" "$TMP_ROOT/missing.chd" >/dev/null 2>&1; then
     exit 1
 fi
 
-printf 'Verified wrapper quoting, input seed, roster, and BIOS policy\n'
+printf 'Verified wrapper quoting, input seed, roster, and BIOS selection contract\n'

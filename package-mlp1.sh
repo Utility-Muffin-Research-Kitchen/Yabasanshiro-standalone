@@ -13,8 +13,22 @@ CMAKE_DIR="$ROOT_DIR/output/mlp1/cmake"
 SOURCE_ARCHIVE_NAME="yabasanshiro-standalone-${YABASANSHIRO_UPSTREAM_VERSION}-mlp1-source.tar.gz"
 SOURCE_URL="${YABASANSHIRO_SOURCE_URL:-https://github.com/Utility-Muffin-Research-Kitchen/Yabasanshiro-standalone}"
 SOURCE_SHA256="${YABASANSHIRO_SOURCE_SHA256:-}"
+# The corresponding-source release this build's archive was published under, and
+# the commit it was cut from. They are recorded separately from the URL so a
+# source revision tag that differs from the Leaf release tag is unambiguous in
+# the manifest rather than something a reader has to parse back out of a URL.
+SOURCE_TAG="${YABASANSHIRO_SOURCE_TAG:-}"
+SOURCE_COMMIT="${YABASANSHIRO_SOURCE_COMMIT:-}"
 if [ -n "$SOURCE_SHA256" ] && [[ ! "$SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
     echo "invalid YABASANSHIRO_SOURCE_SHA256" >&2
+    exit 1
+fi
+if [ -n "$SOURCE_COMMIT" ] && [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "invalid YABASANSHIRO_SOURCE_COMMIT" >&2
+    exit 1
+fi
+if [ -n "$SOURCE_TAG" ] && [[ "$SOURCE_TAG" == */* ]]; then
+    echo "invalid YABASANSHIRO_SOURCE_TAG" >&2
     exit 1
 fi
 
@@ -87,8 +101,13 @@ The archive includes the exact patched source, dependency source, build
 scripts, licences, provenance, and checksums used for this build.
 
 The MLP1 port forces the native renderer and menu into the panel's landscape
-orientation. HLE BIOS is the tested default; an external BIOS remains available
-as an explicit YABASANSHIRO_BIOS_MODE=external compatibility override.
+orientation. HLE BIOS is still the default. Leaf's Saturn BIOS picker selects a
+specific staged image and passes it as YABASANSHIRO_BIOS_FILE with
+YABASANSHIRO_BIOS_MODE=external; that file is checked and used exactly as given,
+and never copied or renamed. A direct caller that sets no file keeps the older
+YABASANSHIRO_BIOS_MODE=hle|external|auto behavior over
+BIOS/SATURN/saturn_bios.bin.
+No BIOS is bundled, downloaded, or redistributed.
 
 Configuration is private app data. Backup RAM is stored below
 Saves/YabaSanshiro and native .yss states below States/YabaSanshiro for the
@@ -121,6 +140,8 @@ jq \
     --arg source_url "$SOURCE_URL" \
     --arg source_archive "$SOURCE_ARCHIVE_NAME" \
     --arg source_sha256 "$SOURCE_SHA256" \
+    --arg source_tag "$SOURCE_TAG" \
+    --arg source_commit "$SOURCE_COMMIT" \
     --argjson files "$files_json" \
     '. + {
       package_schema_version: $package_schema_version,
@@ -128,7 +149,9 @@ jq \
       corresponding_source: {
         url: $source_url,
         archive: $source_archive,
-        sha256: (if $source_sha256 == "" then null else $source_sha256 end)
+        sha256: (if $source_sha256 == "" then null else $source_sha256 end),
+        tag: (if $source_tag == "" then null else $source_tag end),
+        commit: (if $source_commit == "" then null else $source_commit end)
       },
       files: $files
     }' "$BUILD_DIR/provenance/build-manifest.json" >"$OUTPUT_DIR/manifest.json"
