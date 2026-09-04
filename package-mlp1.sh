@@ -105,7 +105,8 @@ orientation. HLE BIOS is still the default. Leaf's Saturn BIOS picker selects a
 specific staged image and passes it as YABASANSHIRO_BIOS_FILE with
 YABASANSHIRO_BIOS_MODE=external; that file is checked and used exactly as given,
 and never copied or renamed. A direct caller that sets no file keeps the older
-YABASANSHIRO_BIOS_MODE=hle|external|auto behavior over BIOS/saturn_bios.bin.
+YABASANSHIRO_BIOS_MODE=hle|external|auto behavior over
+BIOS/SATURN/saturn_bios.bin.
 No BIOS is bundled, downloaded, or redistributed.
 
 Configuration is private app data. Backup RAM is stored below

@@ -124,7 +124,7 @@ export YABASANSHIRO_MLP1_ROTATE_90=1
 #   quoted into bios_args -- never evaluated as shell.
 #
 #   A direct caller that sets no FILE keeps the original hle|external|auto mode
-#   semantics over the standard $BIOS_PATH/saturn_bios.bin. auto exists only for
+#   semantics over the standard $BIOS_PATH/SATURN/saturn_bios.bin. auto exists only for
 #   those callers; the Leaf picker never offers it and never resolves to it.
 #
 # An explicit FILE is checked immediately before exec because a card can be
@@ -135,6 +135,7 @@ bios_args=()
 bios_mode="${YABASANSHIRO_BIOS_MODE:-hle}"
 selected_bios_path=""
 selected_bios_source=standard
+standard_bios_path="$BIOS_PATH/SATURN/saturn_bios.bin"
 
 if [ -n "${YABASANSHIRO_BIOS_FILE+x}" ]; then
     explicit_bios="$YABASANSHIRO_BIOS_FILE"
@@ -166,8 +167,8 @@ if [ -n "${YABASANSHIRO_BIOS_FILE+x}" ]; then
     selected_bios=external
     bios_args=(-b "$selected_bios_path")
 else
-    if [ -f "$BIOS_PATH/saturn_bios.bin" ]; then
-        selected_bios_path="$BIOS_PATH/saturn_bios.bin"
+    if [ -f "$standard_bios_path" ]; then
+        selected_bios_path="$standard_bios_path"
     fi
     case "$bios_mode" in
         auto|external)
@@ -175,7 +176,7 @@ else
                 bios_args=(-b "$selected_bios_path")
                 selected_bios=external
             elif [ "$bios_mode" = external ]; then
-                echo "external Saturn BIOS not found: $BIOS_PATH/saturn_bios.bin" >&2
+                echo "external Saturn BIOS not found: $standard_bios_path" >&2
                 exit 1
             else
                 selected_bios=hle

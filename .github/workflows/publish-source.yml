@@ -91,11 +91,13 @@ jobs:
           git push origin "$SOURCE_TAG"
           if [ "$SOURCE_TAG" = "$LEAF_RELEASE_TAG" ]; then
             revision_note=""
+            release_title="YabaSanshiro source for Leaf $LEAF_RELEASE_TAG"
           else
             revision_note="This is an updated corresponding-source revision for Leaf $LEAF_RELEASE_TAG, not a new Leaf release. Earlier source releases for the same Leaf version remain published and unchanged."
+            release_title="Updated YabaSanshiro source for Leaf $LEAF_RELEASE_TAG (not a new Leaf release)"
           fi
           gh release create "$SOURCE_TAG" \
             output/mlp1/source/*-source.tar.gz \
             output/mlp1/source/*-source.tar.gz.sha256 \
-            --title "YabaSanshiro source for Leaf $LEAF_RELEASE_TAG" \
+            --title "$release_title" \
             --notes "Corresponding source for the YabaSanshiro standalone runtime distributed by Leaf $LEAF_RELEASE_TAG. This release contains source and checksums only; the runnable emulator is packaged with Leaf. $revision_note"

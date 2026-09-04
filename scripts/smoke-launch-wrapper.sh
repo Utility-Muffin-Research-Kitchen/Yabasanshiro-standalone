@@ -11,16 +11,18 @@ USERDATA_PATH_TEST="$SDCARD_PATH_TEST/.userdata/mlp1"
 SAVES_PATH_TEST="$SDCARD_PATH_TEST/Saves"
 STATES_PATH_TEST="$SDCARD_PATH_TEST/States"
 BIOS_PATH_TEST="$SDCARD_PATH_TEST/BIOS"
+SATURN_BIOS_DIR="$BIOS_PATH_TEST/SATURN"
 LOGS_PATH_TEST="$USERDATA_PATH_TEST/logs"
 RUNTIME_PATH_TEST="$TMP_ROOT/runtime root"
 ROM_PATH="$SDCARD_PATH_TEST/Roms/SATURN/Shining Force III's \${cash}; [USA], v1.chd"
 
 mkdir -p "$PACKAGE_DIR/bin" "$PACKAGE_DIR/defaults" \
-    "$(dirname "$ROM_PATH")" "$BIOS_PATH_TEST"
+    "$(dirname "$ROM_PATH")" "$SATURN_BIOS_DIR"
 cp "$ROOT_DIR/config/mlp1/launch.sh" "$PACKAGE_DIR/launch.sh"
 cp "$ROOT_DIR/config/mlp1/defaults/config.version" "$PACKAGE_DIR/defaults/"
 cp "$ROOT_DIR/config/mlp1/defaults/es_temporaryinput.cfg" "$PACKAGE_DIR/defaults/"
-touch "$ROM_PATH" "$BIOS_PATH_TEST/saturn_bios.bin"
+touch "$ROM_PATH" "$SATURN_BIOS_DIR/saturn_bios.bin" \
+    "$BIOS_PATH_TEST/saturn_bios.bin"
 
 cat >"$PACKAGE_DIR/bin/yabasanshiro" <<'EOF'
 #!/usr/bin/env bash
@@ -122,19 +124,19 @@ fi
 
 run_wrapper YABASANSHIRO_BIOS_MODE=external
 grep -F 'arg_4=<-b>' "$LOG_FILE" >/dev/null
-grep -F "arg_5=<$BIOS_PATH_TEST/saturn_bios.bin>" "$LOG_FILE" >/dev/null
-grep -F "bios_path=$BIOS_PATH_TEST/saturn_bios.bin" "$LOG_FILE" >/dev/null
+grep -F "arg_5=<$SATURN_BIOS_DIR/saturn_bios.bin>" "$LOG_FILE" >/dev/null
+grep -F "bios_path=$SATURN_BIOS_DIR/saturn_bios.bin" "$LOG_FILE" >/dev/null
 grep -F 'bios_source=standard' "$LOG_FILE" >/dev/null
 
 # auto is legacy-caller-only: present here, never produced by the Leaf picker.
 run_wrapper YABASANSHIRO_BIOS_MODE=auto
-grep -F "bios_path=$BIOS_PATH_TEST/saturn_bios.bin" "$LOG_FILE" >/dev/null
+grep -F "bios_path=$SATURN_BIOS_DIR/saturn_bios.bin" "$LOG_FILE" >/dev/null
 grep -F 'bios_source=standard' "$LOG_FILE" >/dev/null
 
 # ── Explicit selected-file contract (the Leaf picker's caller shape) ────────
 # A regional, non-standard name in a subfolder, carrying spaces, quotes and
 # shell metacharacters. It must reach the emulator as one unchanged argument.
-SELECTED_DIR="$BIOS_PATH_TEST/Saturn's dumps"
+SELECTED_DIR="$SATURN_BIOS_DIR/Saturn's dumps"
 SELECTED_BIOS="$SELECTED_DIR/Sega Saturn BIOS \$(reboot) \`x\` ;rm -rf [JP].bin"
 OTHER_BIOS="$SELECTED_DIR/Sega Saturn BIOS [EU].bin"
 mkdir -p "$SELECTED_DIR"
@@ -158,7 +160,7 @@ if [ ! -f "$SELECTED_BIOS" ]; then
     exit 1
 fi
 # A valid explicit file wins over the standard filename, which is still staged.
-if grep -F "arg_5=<$BIOS_PATH_TEST/saturn_bios.bin>" "$LOG_FILE" >/dev/null; then
+if grep -F "arg_5=<$SATURN_BIOS_DIR/saturn_bios.bin>" "$LOG_FILE" >/dev/null; then
     echo "explicit BIOS selection lost to the legacy standard filename" >&2
     exit 1
 fi
