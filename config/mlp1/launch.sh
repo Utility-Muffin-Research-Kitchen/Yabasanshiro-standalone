@@ -1,5 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# LOG-SAFE-1. The session log lives on a FAT card and can go unwritable (a bad
+# cluster chain, a full card, or the FAT32 4 GiB per-file ceiling). stdout and
+# stderr here are inherited from the launcher and point at that file. Under
+# set -e a failed echo would abort this script and the game would never start,
+# so probe both once and fall back to /dev/null, then never let a log write
+# decide whether a game launches.
+leaf_log_probe() {
+    # A real byte, not a zero-length write: a 0-byte write can succeed without
+    # touching the device and would not detect EIO/EFBIG. The subshell ignores
+    # SIGXFSZ: at the FAT32 ceiling the kernel raises it and its default action
+    # would kill this shell before the write could fail with EFBIG.
+    ( trap '' XFSZ; printf '\n' ) 2>/dev/null
+}
+leaf_log_probe >/dev/null 2>&1 || true
+if ! leaf_log_probe; then
+    exec >/dev/null
+fi
+if ! leaf_log_probe >&2; then
+    exec 2>/dev/null
+fi
+
+log() { ( trap '' XFSZ; printf '%s\n' "$*" ) 2>/dev/null || true; }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -13,12 +35,12 @@ elif [ -n "${SDCARD_PATH:-}" ] && [ -n "${PLATFORM:-}" ] &&
 fi
 
 if [ "$#" -ne 1 ]; then
-    echo "usage: $0 ROM" >&2
+    log "usage: $0 ROM"
     exit 2
 fi
 ROM_PATH="$1"
 if [ ! -f "$ROM_PATH" ]; then
-    echo "YabaSanshiro ROM not found: $ROM_PATH" >&2
+    log "YabaSanshiro ROM not found: $ROM_PATH"
     exit 1
 fi
 
@@ -50,7 +72,7 @@ for required_path in \
     "$DEFAULT_INPUT" \
     "$DEFAULT_VERSION_FILE"; do
     if [ ! -f "$required_path" ]; then
-        echo "YabaSanshiro package input missing: $required_path" >&2
+        log "YabaSanshiro package input missing: $required_path"
         exit 1
     fi
 done
@@ -58,7 +80,7 @@ done
 default_version="$(tr -d '[:space:]' <"$DEFAULT_VERSION_FILE")"
 case "$default_version" in
     ''|*[!0-9]*)
-        echo "invalid YabaSanshiro defaults version: $default_version" >&2
+        log "invalid YabaSanshiro defaults version: $default_version"
         exit 1
         ;;
 esac
@@ -68,7 +90,7 @@ esac
 # colliding, while this assertion prevents an unstable SDL instance mapping.
 if [ "${JAWAKA_INPUT_ROSTER_COUNT:-}" != "1" ] ||
    [ "${JAWAKA_RETROARCH_JOYPAD_INDEX:-}" != "0" ]; then
-    echo "YabaSanshiro SR0 requires the one-device calibrated Jawaka roster" >&2
+    log "YabaSanshiro SR0 requires the one-device calibrated Jawaka roster"
     exit 1
 fi
 
@@ -83,7 +105,7 @@ if [ -f "$INSTALLED_VERSION_FILE" ]; then
     installed_version="$(tr -d '[:space:]' <"$INSTALLED_VERSION_FILE")"
     case "$installed_version" in
         ''|*[!0-9]*)
-            echo "invalid installed YabaSanshiro defaults version: $installed_version" >&2
+            log "invalid installed YabaSanshiro defaults version: $installed_version"
             exit 1
             ;;
     esac
@@ -96,13 +118,13 @@ if [ "$installed_version" -lt "$default_version" ]; then
         mv "$input_tmp" "$INPUT_CONFIG"
     fi
     if ! grep -Eq 'name="select"[^>]*id="10"' "$INPUT_CONFIG"; then
-        echo "YabaSanshiro input config does not bind Leaf Menu to button 10" >&2
+        log "YabaSanshiro input config does not bind Leaf Menu to button 10"
         exit 1
     fi
     printf '%s\n' "$default_version" >"$INSTALLED_VERSION_FILE"
 fi
 if ! grep -Eq 'name="select"[^>]*id="10"' "$INPUT_CONFIG"; then
-    echo "YabaSanshiro input config does not bind Leaf Menu to button 10" >&2
+    log "YabaSanshiro input config does not bind Leaf Menu to button 10"
     exit 1
 fi
 
@@ -140,26 +162,26 @@ standard_bios_path="$BIOS_PATH/SATURN/saturn_bios.bin"
 if [ -n "${YABASANSHIRO_BIOS_FILE+x}" ]; then
     explicit_bios="$YABASANSHIRO_BIOS_FILE"
     if [ -z "$explicit_bios" ]; then
-        echo "YABASANSHIRO_BIOS_FILE is set but empty" >&2
+        log "YABASANSHIRO_BIOS_FILE is set but empty"
         exit 2
     fi
     if [ "$bios_mode" != external ]; then
-        echo "YABASANSHIRO_BIOS_FILE requires YABASANSHIRO_BIOS_MODE=external, got: $bios_mode" >&2
+        log "YABASANSHIRO_BIOS_FILE requires YABASANSHIRO_BIOS_MODE=external, got: $bios_mode"
         exit 2
     fi
     if [ -L "$explicit_bios" ] || [ ! -f "$explicit_bios" ]; then
-        echo "selected Saturn BIOS is not a regular file: $explicit_bios" >&2
+        log "selected Saturn BIOS is not a regular file: $explicit_bios"
         exit 1
     fi
     if [ ! -r "$explicit_bios" ]; then
-        echo "selected Saturn BIOS is not readable: $explicit_bios" >&2
+        log "selected Saturn BIOS is not readable: $explicit_bios"
         exit 1
     fi
     # A raw Saturn BIOS is exactly 512 KiB: the emulator loads 0x80000 bytes.
     # Size is a shape check, not proof of authenticity or game compatibility.
     explicit_bios_size="$(wc -c <"$explicit_bios" | tr -d '[:space:]')"
     if [ "$explicit_bios_size" != 524288 ]; then
-        echo "selected Saturn BIOS is not a 512 KiB image (${explicit_bios_size} bytes): $explicit_bios" >&2
+        log "selected Saturn BIOS is not a 512 KiB image (${explicit_bios_size} bytes): $explicit_bios"
         exit 1
     fi
     selected_bios_path="$explicit_bios"
@@ -176,7 +198,7 @@ else
                 bios_args=(-b "$selected_bios_path")
                 selected_bios=external
             elif [ "$bios_mode" = external ]; then
-                echo "external Saturn BIOS not found: $standard_bios_path" >&2
+                log "external Saturn BIOS not found: $standard_bios_path"
                 exit 1
             else
                 selected_bios=hle
@@ -188,14 +210,21 @@ else
             selected_bios_path=""
             ;;
         *)
-            echo "unsupported YABASANSHIRO_BIOS_MODE: $bios_mode" >&2
+            log "unsupported YABASANSHIRO_BIOS_MODE: $bios_mode"
             exit 2
             ;;
     esac
 fi
 
 cd "$RUNTIME_DIR"
-: >"$LOG_FILE"
+# LOG-SAFE-1. The YabaSanshiro log lives on the same FAT card as the session
+# log, so this redirect gets the same treatment: prove the file can take a real
+# byte, then either log there or log nowhere, but never fail the launch on it.
+if : >"$LOG_FILE" 2>/dev/null && leaf_log_probe >>"$LOG_FILE"; then
+    exec >>"$LOG_FILE" 2>&1
+else
+    exec >/dev/null 2>&1
+fi
 {
     printf 'probe=sr0\n'
     printf 'resolution_cli_default=original\n'
@@ -211,7 +240,7 @@ cd "$RUNTIME_DIR"
     printf 'roster_count=%s\n' "$JAWAKA_INPUT_ROSTER_COUNT"
     printf 'joypad_index=%s\n' "$JAWAKA_RETROARCH_JOYPAD_INDEX"
     printf 'rom=%s\n' "$ROM_PATH"
-} >>"$LOG_FILE"
+} || true
 
 exec "$ROOT_DIR/bin/yabasanshiro" \
-    -r 3 -i "$ROM_PATH" "${bios_args[@]}" >>"$LOG_FILE" 2>&1
+    -r 3 -i "$ROM_PATH" "${bios_args[@]}"
