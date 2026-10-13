@@ -11,17 +11,17 @@ on:
         description: >-
           Source-only revision tag, when this source no longer matches an
           already published one for the same Leaf release (for example
-          v0.11.0-beta.1-source.2). Leave empty to use the Leaf release tag.
+          v0.11.0-beta.1-source.2). Leave empty to reuse the source already
+          published for this commit, or else to use the Leaf release tag.
         required: false
         type: string
 
 permissions:
   contents: write
 
+# Reusing a source release edits its notes, so runs never overlap.
 concurrency:
-  group: >-
-    yabasanshiro-source-${{ inputs.source_tag != '' && inputs.source_tag
-    || inputs.leaf_release_tag }}
+  group: yabasanshiro-source
   cancel-in-progress: false
 
 jobs:
@@ -34,20 +34,47 @@ jobs:
           fetch-depth: 0
 
       # The Leaf release identity and this repository's source tag are two
-      # different things. They are equal by default, but when a Leaf release
-      # that has not been published yet needs updated corresponding source, the
-      # already published source tag and its assets must stay untouched, so the
-      # new source goes out under its own immutable revision tag. A source-only
-      # tag must never become the Leaf release identity.
-      - name: Resolve and require a new source tag
+      # different things. When main already has a published source release,
+      # a new Leaf release reuses it: nothing is rebuilt or uploaded, and the
+      # Leaf tag is added to that release's "Leaf releases:" notes line.
+      # Otherwise new source goes out under the Leaf tag, or under an explicit
+      # source-only revision tag when that Leaf release already has published
+      # source that no longer matches. Published tags and assets stay
+      # untouched, and a source-only tag never becomes the Leaf release
+      # identity.
+      - name: Resolve the source release
         id: resolve
         env:
+          GH_TOKEN: ${{ github.token }}
           LEAF_RELEASE_TAG: ${{ inputs.leaf_release_tag }}
           SOURCE_TAG_INPUT: ${{ inputs.source_tag }}
           SELECTED_REF: ${{ github.ref }}
         run: |
+          set -euo pipefail
           test "$SELECTED_REF" = refs/heads/main
           [[ "$LEAF_RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          if [ -z "$SOURCE_TAG_INPUT" ]; then
+            # shellcheck disable=SC1091
+            . ./upstream.env
+            archive="yabasanshiro-standalone-${YABASANSHIRO_UPSTREAM_VERSION}-mlp1-source.tar.gz"
+            git tag --points-at HEAD | jq -R . | jq -s . >"$RUNNER_TEMP/head-tags.json"
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+              jq -s 'add // []' >"$RUNNER_TEMP/releases.json"
+            reuse_tag="$(jq -r \
+              --slurpfile tags "$RUNNER_TEMP/head-tags.json" \
+              --arg archive "$archive" '
+                [.[]
+                  | select(.draft == false and .prerelease == false)
+                  | select(.tag_name | IN($tags[0][]))
+                  | select(([.assets[] | select(.state == "uploaded") | .name] | sort)
+                      == ([$archive, $archive + ".sha256"] | sort))]
+                | sort_by(.published_at) | last | .tag_name // empty
+              ' "$RUNNER_TEMP/releases.json")"
+            if [ -n "$reuse_tag" ]; then
+              printf 'mode=reuse\nsource_tag=%s\n' "$reuse_tag" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           source_tag="${SOURCE_TAG_INPUT:-$LEAF_RELEASE_TAG}"
           [[ "$source_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
           if git ls-remote --exit-code --tags origin "refs/tags/$source_tag" >/dev/null 2>&1; then
@@ -55,15 +82,60 @@ jobs:
             echo "inspect it and allocate the next source revision; never retarget a published tag" >&2
             exit 1
           fi
-          printf 'source_tag=%s\n' "$source_tag" >>"$GITHUB_OUTPUT"
+          printf 'mode=publish\nsource_tag=%s\n' "$source_tag" >>"$GITHUB_OUTPUT"
+
+      - name: Add this Leaf release to the reused source release
+        if: steps.resolve.outputs.mode == 'reuse'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEAF_RELEASE_TAG: ${{ inputs.leaf_release_tag }}
+          SOURCE_TAG: ${{ steps.resolve.outputs.source_tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$SOURCE_TAG" --json name,body >"$RUNNER_TEMP/release.json"
+          python3 - "$RUNNER_TEMP/release.json" "$LEAF_RELEASE_TAG" >"$RUNNER_TEMP/notes.md" <<'PY'
+          import json
+          import re
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              release = json.load(stream)
+          leaf_tag = sys.argv[2]
+          prefix = "Leaf releases: "
+          lines = (release.get("body") or "").rstrip().splitlines()
+          for index, line in enumerate(lines):
+              if line.startswith(prefix):
+                  tags = [tag.strip() for tag in line[len(prefix):].split(",") if tag.strip()]
+                  if leaf_tag not in tags:
+                      tags.append(leaf_tag)
+                  lines[index] = prefix + ", ".join(tags)
+                  break
+          else:
+              # Releases published before reuse existed name their only Leaf
+              # release in the title.
+              match = re.search(r"for Leaf (v[^\s()]+)", release.get("name") or "")
+              tags = [match.group(1)] if match else []
+              if leaf_tag not in tags:
+                  tags.append(leaf_tag)
+              lines += ([""] if lines else []) + [prefix + ", ".join(tags)]
+          print("\n".join(lines))
+          PY
+          gh release edit "$SOURCE_TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          {
+            echo "Reused source release \`$SOURCE_TAG\` for Leaf \`$LEAF_RELEASE_TAG\`. Nothing was rebuilt or uploaded."
+            echo
+            echo "Build Leaf with \`YABASANSHIRO_SOURCE_TAG=$SOURCE_TAG\`."
+          } >>"$GITHUB_STEP_SUMMARY"
 
       - name: Checkout MLP1 toolchain flags
+        if: steps.resolve.outputs.mode == 'publish'
         uses: actions/checkout@v4
         with:
           repository: Utility-Muffin-Research-Kitchen/mlp1-toolchain
           path: mlp1-toolchain
 
       - name: Build and verify source archive
+        if: steps.resolve.outputs.mode == 'publish'
         env:
           MLP1_FLAGS_DIR: ${{ github.workspace }}/mlp1-toolchain/flags
           TOOLCHAIN_IMAGE: ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:latest
@@ -78,6 +150,7 @@ jobs:
           (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
 
       - name: Publish source-only release
+        if: steps.resolve.outputs.mode == 'publish'
         env:
           GH_TOKEN: ${{ github.token }}
           LEAF_RELEASE_TAG: ${{ inputs.leaf_release_tag }}
@@ -93,11 +166,20 @@ jobs:
             revision_note=""
             release_title="YabaSanshiro source for Leaf $LEAF_RELEASE_TAG"
           else
-            revision_note="This is an updated corresponding-source revision for Leaf $LEAF_RELEASE_TAG, not a new Leaf release. Earlier source releases for the same Leaf version remain published and unchanged."
+            revision_note=" This is an updated corresponding-source revision for Leaf $LEAF_RELEASE_TAG, not a new Leaf release. Earlier source releases for the same Leaf version remain published and unchanged."
             release_title="Updated YabaSanshiro source for Leaf $LEAF_RELEASE_TAG (not a new Leaf release)"
           fi
+          printf '%s\n\n%s\n' \
+            "Corresponding source for the YabaSanshiro standalone runtime distributed by the Leaf releases listed below. This release contains source and checksums only; the runnable emulator is packaged with Leaf. Later Leaf releases that ship this source unchanged are added to the list.$revision_note" \
+            "Leaf releases: $LEAF_RELEASE_TAG" \
+            >"$RUNNER_TEMP/notes.md"
           gh release create "$SOURCE_TAG" \
             output/mlp1/source/*-source.tar.gz \
             output/mlp1/source/*-source.tar.gz.sha256 \
             --title "$release_title" \
-            --notes "Corresponding source for the YabaSanshiro standalone runtime distributed by Leaf $LEAF_RELEASE_TAG. This release contains source and checksums only; the runnable emulator is packaged with Leaf. $revision_note"
+            --notes-file "$RUNNER_TEMP/notes.md"
+          {
+            echo "Published source release \`$SOURCE_TAG\` for Leaf \`$LEAF_RELEASE_TAG\`."
+            echo
+            echo "Build Leaf with \`YABASANSHIRO_SOURCE_TAG=$SOURCE_TAG\`."
+          } >>"$GITHUB_STEP_SUMMARY"

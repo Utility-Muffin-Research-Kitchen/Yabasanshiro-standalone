@@ -22,6 +22,12 @@ Publish that archive and its `.sha256` file before the matching Leaf binary
 release. Leaf records a direct link to the exact asset; the public repository
 alone is not treated as the release's self-contained source artifact.
 
+The `Publish corresponding source` workflow handles this for each Leaf
+release. When `main` already has a published source release, the workflow
+reuses it: nothing is rebuilt or uploaded, and the Leaf tag is added to that
+release's `Leaf releases:` notes line. The run summary names the source tag to
+pass to the Leaf build as `YABASANSHIRO_SOURCE_TAG`.
+
 Leaf release builds set `YABASANSHIRO_SOURCE_URL` and
 `YABASANSHIRO_SOURCE_SHA256` so the runtime package records the exact source
 asset published by this repository. Local development packages point at the
