@@ -136,7 +136,15 @@ export SDL_AUDIODRIVER=pulseaudio
 export PULSE_SERVER="${PULSE_SERVER:-unix:/tmp/pulse-socket}"
 export YABASANSHIRO_BACKUP_PATH="$BACKUP_DIR/backup.bin"
 export YABASANSHIRO_STATE_DIR="$STATE_DIR"
-export YABASANSHIRO_MLP1_ROTATE_90=1
+# Leaf says which screen the game is on (LEAF_DISPLAY_*, set by jawakad; unset
+# means the built-in panel). The panel is a portrait part mounted sideways, so
+# the picture and the menu are rotated for it; a TV needs neither. The rotation
+# patch only checks that the variable exists, so on a TV it must be unset.
+if [ "${LEAF_DISPLAY_OUTPUT:-panel}" = hdmi ]; then
+    unset YABASANSHIRO_MLP1_ROTATE_90
+else
+    export YABASANSHIRO_MLP1_ROTATE_90=1
+fi
 
 # BIOS selection. Two callers, one behavior each:
 #

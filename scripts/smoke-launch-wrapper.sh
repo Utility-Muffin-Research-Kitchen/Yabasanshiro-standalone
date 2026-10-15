@@ -32,6 +32,8 @@ for name in HOME TMPDIR SDL_VIDEODRIVER SDL_KMSDRM_REQUIRE_DRM_MASTER \
     YABASANSHIRO_STATE_DIR YABASANSHIRO_MLP1_ROTATE_90; do
     printf '%s=<%s>\n' "$name" "${!name-}"
 done
+# The rotation patch tests only whether the variable exists.
+printf 'YABASANSHIRO_MLP1_ROTATE_90[%s]\n' "${YABASANSHIRO_MLP1_ROTATE_90+set}"
 index=0
 for argument in "$@"; do
     printf 'arg_%d=<%s>\n' "$index" "$argument"
@@ -56,7 +58,8 @@ printf '1\n' >"$APP_STATE_ROOT/.umrk-defaults-version"
 # BIOS contract variables -- or deliberately leave one unset.
 run_wrapper() {
     local -a bios_env=("$@")
-    env -u UMRK_ENV_FILE \
+    env -u UMRK_ENV_FILE -u LEAF_DISPLAY_OUTPUT -u LEAF_DISPLAY_CONNECTOR \
+        -u LEAF_DISPLAY_MODE -u LEAF_DISPLAY_ASPECT \
         PLATFORM=mlp1 \
         SDCARD_PATH="$SDCARD_PATH_TEST" \
         USERDATA_PATH="$USERDATA_PATH_TEST" \
@@ -272,4 +275,14 @@ if "$PACKAGE_DIR/launch.sh" "$TMP_ROOT/missing.chd" >/dev/null 2>&1; then
     exit 1
 fi
 
-printf 'Verified wrapper quoting, input seed, roster, and BIOS selection contract\n'
+# The screen jawakad reports (LEAF_DISPLAY_*): the portrait panel, when unset
+# or named, gets the rotation; a TV gets none, with the variable absent.
+run_wrapper
+grep -F 'YABASANSHIRO_MLP1_ROTATE_90[set]' "$LOG_FILE" >/dev/null
+run_wrapper LEAF_DISPLAY_OUTPUT=panel LEAF_DISPLAY_MODE=720x960@60
+grep -F 'YABASANSHIRO_MLP1_ROTATE_90=<1>' "$LOG_FILE" >/dev/null
+run_wrapper LEAF_DISPLAY_OUTPUT=hdmi LEAF_DISPLAY_MODE=1280x720@60 \
+    LEAF_DISPLAY_ASPECT=4:3 YABASANSHIRO_MLP1_ROTATE_90=inherited
+grep -F 'YABASANSHIRO_MLP1_ROTATE_90[]' "$LOG_FILE" >/dev/null
+
+printf 'Verified wrapper quoting, input seed, roster, BIOS selection contract, and the panel and TV display handoff\n'
